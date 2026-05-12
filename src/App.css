@@ -16,6 +16,7 @@
 .scrape-run-title,
 .search-field,
 .select-field,
+.webhook-field,
 .score-field {
   display: flex;
   align-items: center;
@@ -439,6 +440,7 @@ h2 {
 
 .search-field,
 .select-field,
+.webhook-field,
 .score-field {
   gap: 8px;
   min-height: 44px;
@@ -453,6 +455,7 @@ h2 {
 }
 
 .search-field input,
+.webhook-field input,
 .select-field select {
   width: 100%;
   border: 0;
@@ -460,8 +463,13 @@ h2 {
   background: transparent;
 }
 
-.search-field input::placeholder {
+.search-field input::placeholder,
+.webhook-field input::placeholder {
   color: #778390;
+}
+
+.webhook-field {
+  flex: 1 1 320px;
 }
 
 .score-field {

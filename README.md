@@ -223,6 +223,52 @@ CONVEX_URL="https://your-deployment.convex.cloud" npm run enrich:homepage -- --l
 
 In write mode, the worker updates the lead email when a lead does not already have one, merges enrichment signals into the existing signal list, and raises the score based on found contact signals. Failed homepage fetches are logged and do not stop the rest of the run.
 
+## Google Sheets Export
+
+The dashboard can send the current filtered lead list to a configured Google Sheets webhook while keeping the CSV export available. This is designed for a Google Apps Script web app, Zapier webhook, Make webhook, or any endpoint that accepts browser `POST` requests.
+
+Configure a default webhook URL:
+
+```bash
+VITE_SHEETS_WEBHOOK_URL="https://script.google.com/macros/s/YOUR_DEPLOYMENT/exec"
+```
+
+You can also paste a webhook URL into the dashboard field. The browser stores that URL locally for the next visit.
+
+Payload shape:
+
+```json
+{
+  "exportedAt": "2026-05-12T14:00:00.000Z",
+  "source": "LeadVault dashboard",
+  "filters": {
+    "searchTerm": "",
+    "category": "All categories",
+    "city": "All cities",
+    "minScore": 60
+  },
+  "count": 2,
+  "leads": [
+    {
+      "businessName": "Avalon Dental Care",
+      "category": "dentist",
+      "city": "Manchester",
+      "directory": "OpenStreetMap Overpass API",
+      "website": "https://www.avaloncaredentalpractice.co.uk/",
+      "email": "info@avalondentalcarepractice.co.uk",
+      "phone": "+44 161 224 4345",
+      "address": "281-283 Slade Lane, Manchester, M19 2HR",
+      "score": 100,
+      "status": "New",
+      "signals": ["Email found on website", "Contact page found"],
+      "sourceUrl": "https://www.openstreetmap.org/node/3121055823"
+    }
+  ]
+}
+```
+
+The webhook must allow browser `POST` requests from the dashboard origin and return a 2xx response for successful exports. Failed responses are shown in the dashboard status message without changing lead data.
+
 ## Production Roadmap
 
 This frontend is ready to connect to a real scraper pipeline. A production version would typically add:

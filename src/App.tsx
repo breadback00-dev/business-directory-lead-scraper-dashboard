@@ -16,6 +16,7 @@ import {
   PlayCircle,
   RotateCcw,
   Search,
+  Send,
   UploadCloud,
 } from 'lucide-react'
 import { api } from '../convex/_generated/api'
@@ -169,6 +170,7 @@ const demoLeads: Lead[] = [
 
 const normalizeKey = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, '')
 const csvEscape = (value: string | number) => `"${String(value).replaceAll('"', '""')}"`
+const sheetsWebhookStorageKey = 'leadvault:sheets-webhook-url'
 
 const uniqueOptions = (items: string[]) => Array.from(new Set(items.filter(Boolean))).sort()
 
@@ -292,6 +294,10 @@ function App() {
   const [city, setCity] = useState('All cities')
   const [minScore, setMinScore] = useState(60)
   const [importMessage, setImportMessage] = useState<string | null>(null)
+  const [sheetsWebhookUrl, setSheetsWebhookUrl] = useState(() => {
+    if (typeof window === 'undefined') return import.meta.env.VITE_SHEETS_WEBHOOK_URL ?? ''
+    return localStorage.getItem(sheetsWebhookStorageKey) ?? import.meta.env.VITE_SHEETS_WEBHOOK_URL ?? ''
+  })
 
   const leadData = useMemo(() => (convexLeads ?? []).map(toClientLead), [convexLeads])
   const statusMessage =
@@ -315,6 +321,12 @@ function App() {
         setImportMessage(`Could not load demo data: ${error.message}`)
       })
   }, [convexLeads, replaceWithDemoData])
+
+  useEffect(() => {
+    const trimmedUrl = sheetsWebhookUrl.trim()
+    if (!trimmedUrl) localStorage.removeItem(sheetsWebhookStorageKey)
+    else localStorage.setItem(sheetsWebhookStorageKey, trimmedUrl)
+  }, [sheetsWebhookUrl])
 
   const categories = useMemo(
     () => ['All categories', ...uniqueOptions(leadData.map((lead) => lead.category))],
@@ -484,6 +496,60 @@ function App() {
     URL.revokeObjectURL(url)
   }
 
+  const exportToSheets = async () => {
+    const webhookUrl = sheetsWebhookUrl.trim()
+    if (!webhookUrl) {
+      setImportMessage('Sheets export needs a configured webhook URL.')
+      return
+    }
+
+    if (filteredLeads.length === 0) {
+      setImportMessage('Sheets export skipped because no leads match the current filters.')
+      return
+    }
+
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      source: 'LeadVault dashboard',
+      filters: {
+        searchTerm,
+        category,
+        city,
+        minScore,
+      },
+      count: filteredLeads.length,
+      leads: filteredLeads.map((lead) => ({
+        businessName: lead.businessName,
+        category: lead.category,
+        city: lead.city,
+        directory: lead.directory,
+        website: lead.website,
+        email: lead.email,
+        phone: lead.phone,
+        address: lead.address,
+        score: lead.score,
+        status: lead.status,
+        signals: lead.signals,
+        sourceUrl: lead.sourceUrl,
+      })),
+    }
+
+    try {
+      const response = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: {
+          'content-type': 'text/plain;charset=utf-8',
+        },
+        body: JSON.stringify(payload),
+      })
+
+      if (!response.ok) throw new Error(`Webhook returned ${response.status}`)
+      setImportMessage(`Sent ${filteredLeads.length} leads to Google Sheets.`)
+    } catch (error) {
+      setImportMessage(`Sheets export failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
+  }
+
   return (
     <main className="app-shell">
       <nav className="topbar" aria-label="Dashboard navigation">
@@ -511,6 +577,10 @@ function App() {
           <button className="primary-button" type="button" onClick={exportCsv}>
             <ArrowDownToLine size={17} />
             Export CSV
+          </button>
+          <button className="ghost-button" type="button" onClick={exportToSheets}>
+            <Send size={17} />
+            Send to Sheets
           </button>
         </div>
       </nav>
@@ -695,6 +765,17 @@ function App() {
             onChange={(event) => setMinScore(Number(event.target.value))}
           />
           <strong>{minScore}</strong>
+        </label>
+
+        <label className="webhook-field">
+          <Send size={17} />
+          <span className="sr-only">Google Sheets webhook URL</span>
+          <input
+            type="url"
+            placeholder="Sheets webhook URL"
+            value={sheetsWebhookUrl}
+            onChange={(event) => setSheetsWebhookUrl(event.target.value)}
+          />
         </label>
       </section>
 
