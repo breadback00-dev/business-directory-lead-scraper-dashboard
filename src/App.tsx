@@ -4,282 +4,31 @@ import { z } from 'zod'
 import { useMutation, useQuery } from 'convex/react'
 import {
   ArrowDownToLine,
-  Activity,
   Building2,
   CheckCircle2,
-  Filter,
-  Globe2,
-  History,
-  Mail,
-  MapPin,
-  Phone,
   PlayCircle,
   RotateCcw,
-  Search,
   Send,
   UploadCloud,
 } from 'lucide-react'
 import { api } from '../convex/_generated/api'
-import type { Doc, Id } from '../convex/_generated/dataModel'
+import type { Id } from '../convex/_generated/dataModel'
+import { PageTabs } from './components/PageTabs'
+import { demoLeads } from './data/demoLeads'
+import {
+  buildLeadFromRecord,
+  csvEscape,
+  toClientLead,
+  toLeadInput,
+  uniqueOptions,
+} from './lib/leadHelpers'
+import { LeadsPage } from './pages/LeadsPage'
+import { ScraperRunsPage } from './pages/ScraperRunsPage'
+import { type AppPage, type Lead, type LeadStatus, type ScraperCategory } from './types'
 import './App.css'
 
-const statuses = ['New', 'Contacted', 'Qualified', 'Rejected'] as const
-const scraperCategories = ['dentists', 'accountants', 'cafes', 'pharmacies', 'restaurants', 'solicitors'] as const
-type LeadStatus = (typeof statuses)[number]
-type AppPage = 'leads' | 'scraper'
-
-type Lead = {
-  id: string
-  businessName: string
-  category: string
-  city: string
-  directory: string
-  website: string
-  email: string
-  phone: string
-  address: string
-  sourceUrl: string
-  score: number
-  signals: string[]
-  status: LeadStatus
-}
-
 const rowSchema = z.record(z.string(), z.unknown())
-type LeadInput = Omit<Lead, 'id'>
-
-const demoLeads: Lead[] = [
-  {
-    id: 'demo-1',
-    businessName: 'Northline Dental Studio',
-    category: 'Dentists',
-    city: 'Manchester',
-    directory: 'Local Health Index',
-    website: 'northlinedental.example',
-    email: 'hello@northlinedental.example',
-    phone: '+44 161 555 0134',
-    address: '18 Deansgate, Manchester',
-    sourceUrl: 'https://directory.example/northline-dental',
-    score: 92,
-    signals: ['Email found', 'Booking link', 'Outdated website'],
-    status: 'New',
-  },
-  {
-    id: 'demo-2',
-    businessName: 'Summit Roof Care',
-    category: 'Roofing',
-    city: 'Austin',
-    directory: 'Trade Directory',
-    website: 'summitroofcare.example',
-    email: 'jobs@summitroofcare.example',
-    phone: '+1 512 555 0148',
-    address: '2408 E 7th St, Austin',
-    sourceUrl: 'https://directory.example/summit-roof-care',
-    score: 86,
-    signals: ['High-value category', 'Phone verified', 'No CRM widget'],
-    status: 'Qualified',
-  },
-  {
-    id: 'demo-3',
-    businessName: 'Cedar & Co Accountants',
-    category: 'Accounting',
-    city: 'London',
-    directory: 'Chamber Listings',
-    website: 'cedaraccountants.example',
-    email: 'team@cedaraccountants.example',
-    phone: '+44 20 5555 0173',
-    address: '42 Fleet Street, London',
-    sourceUrl: 'https://directory.example/cedar-co-accountants',
-    score: 78,
-    signals: ['LinkedIn found', 'Contact form', 'Multi-office'],
-    status: 'Contacted',
-  },
-  {
-    id: 'demo-4',
-    businessName: 'Bluebird Family Clinic',
-    category: 'Healthcare',
-    city: 'Birmingham',
-    directory: 'Care Finder',
-    website: 'bluebirdclinic.example',
-    email: 'reception@bluebirdclinic.example',
-    phone: '+44 121 555 0182',
-    address: '9 Cornwall Street, Birmingham',
-    sourceUrl: 'https://directory.example/bluebird-family-clinic',
-    score: 73,
-    signals: ['Email found', 'Reviews rising', 'Needs social links'],
-    status: 'New',
-  },
-  {
-    id: 'demo-5',
-    businessName: 'Harbor View Legal',
-    category: 'Legal',
-    city: 'Liverpool',
-    directory: 'Professional Register',
-    website: 'harborviewlegal.example',
-    email: 'intake@harborviewlegal.example',
-    phone: '+44 151 555 0116',
-    address: '31 Water Street, Liverpool',
-    sourceUrl: 'https://directory.example/harbor-view-legal',
-    score: 69,
-    signals: ['Contact form', 'Local intent', 'No live chat'],
-    status: 'Rejected',
-  },
-  {
-    id: 'demo-6',
-    businessName: 'Oak & Pixel Web Studio',
-    category: 'Marketing',
-    city: 'Leeds',
-    directory: 'Agency Map',
-    website: 'oakpixel.example',
-    email: 'studio@oakpixel.example',
-    phone: '+44 113 555 0194',
-    address: '7 Park Row, Leeds',
-    sourceUrl: 'https://directory.example/oak-pixel-web-studio',
-    score: 81,
-    signals: ['Social links', 'Technology detected', 'Fast site'],
-    status: 'Qualified',
-  },
-  {
-    id: 'demo-7',
-    businessName: 'BrightPath Tutoring',
-    category: 'Education',
-    city: 'Chicago',
-    directory: 'City Business Hub',
-    website: 'brightpathtutoring.example',
-    email: 'learn@brightpathtutoring.example',
-    phone: '+1 312 555 0169',
-    address: '105 W Madison St, Chicago',
-    sourceUrl: 'https://directory.example/brightpath-tutoring',
-    score: 64,
-    signals: ['Email found', 'Seasonal demand', 'Missing analytics'],
-    status: 'New',
-  },
-  {
-    id: 'demo-8',
-    businessName: 'Pinecrest Fitness',
-    category: 'Fitness',
-    city: 'Denver',
-    directory: 'Wellness Directory',
-    website: 'pinecrestfitness.example',
-    email: 'members@pinecrestfitness.example',
-    phone: '+1 720 555 0177',
-    address: '1401 Blake St, Denver',
-    sourceUrl: 'https://directory.example/pinecrest-fitness',
-    score: 71,
-    signals: ['Booking link', 'Instagram found', 'No email automation'],
-    status: 'Contacted',
-  },
-]
-
-const normalizeKey = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, '')
-const csvEscape = (value: string | number) => `"${String(value).replaceAll('"', '""')}"`
 const sheetsWebhookStorageKey = 'leadvault:sheets-webhook-url'
-
-const uniqueOptions = (items: string[]) => Array.from(new Set(items.filter(Boolean))).sort()
-
-const getRecordValue = (record: Record<string, unknown>, aliases: string[]) => {
-  const normalizedRecord = Object.fromEntries(
-    Object.entries(record).map(([key, value]) => [normalizeKey(key), String(value ?? '').trim()]),
-  )
-
-  for (const alias of aliases) {
-    const value = normalizedRecord[normalizeKey(alias)]
-    if (value) return value
-  }
-
-  return ''
-}
-
-const parseSignals = (value: string) =>
-  value
-    .split(/[;|]/)
-    .map((signal) => signal.trim())
-    .filter(Boolean)
-
-const normalizeStatus = (value: string): LeadStatus =>
-  statuses.find((status) => status.toLowerCase() === value.toLowerCase()) ?? 'New'
-
-const generateId = () =>
-  typeof crypto !== 'undefined' && 'randomUUID' in crypto
-    ? crypto.randomUUID()
-    : `lead-${Date.now()}-${Math.random().toString(16).slice(2)}`
-
-const calculateScore = (lead: Omit<Lead, 'id' | 'score' | 'status'>) => {
-  const score =
-    45 +
-    (lead.email ? 18 : 0) +
-    (lead.phone ? 10 : 0) +
-    (lead.website ? 12 : 0) +
-    (lead.sourceUrl ? 5 : 0) +
-    Math.min(10, lead.signals.length * 3)
-
-  return Math.min(100, score)
-}
-
-const buildLeadFromRecord = (record: Record<string, unknown>): Lead | null => {
-  const businessName = getRecordValue(record, ['Business Name', 'Company', 'Name'])
-  if (!businessName) return null
-
-  const baseLead = {
-    businessName,
-    category: getRecordValue(record, ['Category', 'Industry', 'Business Type']) || 'Uncategorized',
-    city: getRecordValue(record, ['City', 'Location', 'Town', 'Market']) || 'Unknown city',
-    directory: getRecordValue(record, ['Directory', 'Source', 'Lead Source']) || 'CSV import',
-    website: getRecordValue(record, ['Website', 'Domain', 'URL']),
-    email: getRecordValue(record, ['Email', 'Email Address']),
-    phone: getRecordValue(record, ['Phone', 'Phone Number', 'Telephone']),
-    address: getRecordValue(record, ['Address', 'Street Address']),
-    sourceUrl: getRecordValue(record, ['Source URL', 'Directory URL', 'Listing URL']),
-    signals: parseSignals(getRecordValue(record, ['Signals', 'Tags', 'Notes'])),
-  }
-  const scoreValue = Number(getRecordValue(record, ['Score', 'Lead Score']))
-  const score = Number.isFinite(scoreValue) ? Math.max(0, Math.min(100, scoreValue)) : calculateScore(baseLead)
-
-  return {
-    ...baseLead,
-    id: generateId(),
-    score,
-    status: normalizeStatus(getRecordValue(record, ['Status', 'Lead Status'])),
-  }
-}
-
-const toLeadInput = (lead: Lead): LeadInput => {
-  return {
-    businessName: lead.businessName,
-    category: lead.category,
-    city: lead.city,
-    directory: lead.directory,
-    website: lead.website,
-    email: lead.email,
-    phone: lead.phone,
-    address: lead.address,
-    sourceUrl: lead.sourceUrl,
-    score: lead.score,
-    signals: lead.signals,
-    status: lead.status,
-  }
-}
-
-const toClientLead = (lead: Doc<'leads'>): Lead => ({
-  id: lead._id,
-  businessName: lead.businessName,
-  category: lead.category,
-  city: lead.city,
-  directory: lead.directory,
-  website: lead.website,
-  email: lead.email,
-  phone: lead.phone,
-  address: lead.address,
-  sourceUrl: lead.sourceUrl,
-  score: lead.score,
-  signals: lead.signals,
-  status: lead.status,
-})
-
-const scoreLabel = (score: number) => {
-  if (score >= 85) return 'Hot'
-  if (score >= 72) return 'Warm'
-  return 'Nurture'
-}
 
 function App() {
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -297,7 +46,7 @@ function App() {
   const [city, setCity] = useState('All cities')
   const [minScore, setMinScore] = useState(60)
   const [importMessage, setImportMessage] = useState<string | null>(null)
-  const [scrapeCategory, setScrapeCategory] = useState<(typeof scraperCategories)[number]>('dentists')
+  const [scrapeCategory, setScrapeCategory] = useState<ScraperCategory>('dentists')
   const [scrapeLocation, setScrapeLocation] = useState('Manchester')
   const [scrapeCountryCode, setScrapeCountryCode] = useState('GB')
   const [scrapeMaxResults, setScrapeMaxResults] = useState(10)
@@ -650,350 +399,51 @@ function App() {
         </div>
         <div className="run-status" aria-label="Latest scraper run status">
           <CheckCircle2 size={18} />
-          <span>{activePage === 'leads' ? `${leadData.length} records loaded` : `${scrapeRuns?.length ?? 0} recent runs`}</span>
+          <span>
+            {activePage === 'leads' ? `${leadData.length} records loaded` : `${scrapeRuns?.length ?? 0} recent runs`}
+          </span>
         </div>
       </section>
 
-      <div className="page-tabs" role="tablist" aria-label="Dashboard pages">
-        <button
-          className={activePage === 'leads' ? 'active' : ''}
-          type="button"
-          role="tab"
-          aria-selected={activePage === 'leads'}
-          onClick={() => setActivePage('leads')}
-        >
-          <Mail size={17} />
-          Leads
-        </button>
-        <button
-          className={activePage === 'scraper' ? 'active' : ''}
-          type="button"
-          role="tab"
-          aria-selected={activePage === 'scraper'}
-          onClick={() => setActivePage('scraper')}
-        >
-          <Activity size={17} />
-          Scraper runs
-        </button>
-      </div>
+      <PageTabs activePage={activePage} onPageChange={setActivePage} />
 
       <p className="import-status" role="status">
         {statusMessage}
       </p>
 
       {activePage === 'leads' ? (
-        <>
-      <section className="import-history" aria-labelledby="import-history-title">
-        <div className="import-history-heading">
-          <History size={18} />
-          <div>
-            <h2 id="import-history-title">Import history</h2>
-            <p>Latest backend import batches and validation counts.</p>
-          </div>
-        </div>
-
-        <div className="import-history-list">
-          {(importHistory ?? []).length > 0 ? (
-            importHistory?.map((importRecord) => (
-              <article className="import-record" key={importRecord._id}>
-                <div>
-                  <strong>{importRecord.fileName}</strong>
-                  <span>{new Date(importRecord.createdAt).toLocaleString()}</span>
-                </div>
-                <dl>
-                  <div>
-                    <dt>Rows</dt>
-                    <dd>{importRecord.rowsReceived}</dd>
-                  </div>
-                  <div>
-                    <dt>Created</dt>
-                    <dd>{importRecord.leadsCreated}</dd>
-                  </div>
-                  <div>
-                    <dt>Duplicates</dt>
-                    <dd>{importRecord.duplicatesSkipped}</dd>
-                  </div>
-                  <div>
-                    <dt>Invalid</dt>
-                    <dd>{importRecord.invalidRowsSkipped}</dd>
-                  </div>
-                </dl>
-              </article>
-            ))
-          ) : (
-            <p className="empty-import-history">
-              {importHistory === undefined ? 'Loading import history...' : 'No CSV imports recorded yet.'}
-            </p>
-          )}
-        </div>
-      </section>
-
-      <section className="metrics-grid" aria-label="Lead metrics">
-        <article className="metric">
-          <span>Visible leads</span>
-          <strong>{metrics.visible}</strong>
-        </article>
-        <article className="metric">
-          <span>Qualified</span>
-          <strong>{metrics.qualified}</strong>
-        </article>
-        <article className="metric">
-          <span>Average score</span>
-          <strong>{metrics.averageScore}</strong>
-        </article>
-        <article className="metric">
-          <span>Email-ready leads</span>
-          <strong>{metrics.emails}</strong>
-        </article>
-      </section>
-
-      <section className="control-strip" aria-label="Lead filters">
-        <label className="search-field">
-          <Search size={18} />
-          <span className="sr-only">Search leads</span>
-          <input
-            type="search"
-            placeholder="Search company, signal, city, or email"
-            value={searchTerm}
-            onChange={(event) => setSearchTerm(event.target.value)}
-          />
-        </label>
-
-        <label className="select-field">
-          <Filter size={17} />
-          <span className="sr-only">Filter by category</span>
-          <select value={category} onChange={(event) => setCategory(event.target.value)}>
-            {categories.map((item) => (
-              <option key={item}>{item}</option>
-            ))}
-          </select>
-        </label>
-
-        <label className="select-field">
-          <MapPin size={17} />
-          <span className="sr-only">Filter by city</span>
-          <select value={city} onChange={(event) => setCity(event.target.value)}>
-            {cities.map((item) => (
-              <option key={item}>{item}</option>
-            ))}
-          </select>
-        </label>
-
-        <label className="score-field">
-          <span>Min score</span>
-          <input
-            type="range"
-            min="50"
-            max="95"
-            value={minScore}
-            onChange={(event) => setMinScore(Number(event.target.value))}
-          />
-          <strong>{minScore}</strong>
-        </label>
-
-        <label className="webhook-field">
-          <Send size={17} />
-          <span className="sr-only">Google Sheets webhook URL</span>
-          <input
-            type="url"
-            placeholder="Sheets webhook URL"
-            value={sheetsWebhookUrl}
-            onChange={(event) => setSheetsWebhookUrl(event.target.value)}
-          />
-        </label>
-      </section>
-
-      <section className="table-panel" aria-labelledby="lead-table-title">
-        <div className="table-heading">
-          <div>
-            <h2 id="lead-table-title">Sales-ready leads</h2>
-            <p>Sorted by lead score with directory and homepage enrichment signals.</p>
-          </div>
-          <span>{filteredLeads.length} matches</span>
-        </div>
-
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Lead</th>
-                <th>Contact</th>
-                <th>Signals</th>
-                <th>Score</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredLeads.map((lead) => (
-                <tr key={lead.id}>
-                  <td>
-                    <div className="lead-cell">
-                      <strong>{lead.businessName}</strong>
-                      <span>
-                        {lead.category} / {lead.city}
-                      </span>
-                      <small>{lead.directory}</small>
-                    </div>
-                  </td>
-                  <td>
-                    <div className="contact-cell">
-                      <span>
-                        <Mail size={14} /> {lead.email || 'No email'}
-                      </span>
-                      <span>
-                        <Phone size={14} /> {lead.phone || 'No phone'}
-                      </span>
-                      <span>
-                        <Globe2 size={14} /> {lead.website || 'No website'}
-                      </span>
-                    </div>
-                  </td>
-                  <td>
-                    <div className="signal-list">
-                      {(lead.signals.length > 0 ? lead.signals : ['No signals yet']).map((signal) => (
-                        <span key={signal}>{signal}</span>
-                      ))}
-                    </div>
-                  </td>
-                  <td>
-                    <div className="score-cell">
-                      <strong>{lead.score}</strong>
-                      <span className={`score-badge ${scoreLabel(lead.score).toLowerCase()}`}>
-                        {scoreLabel(lead.score)}
-                      </span>
-                    </div>
-                  </td>
-                  <td>
-                    <select
-                      className="status-select"
-                      value={lead.status}
-                      onChange={(event) => updateLeadStatus(lead.id, event.target.value as LeadStatus)}
-                    >
-                      {statuses.map((status) => (
-                        <option key={status}>{status}</option>
-                      ))}
-                    </select>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
-        </>
+        <LeadsPage
+          categories={categories}
+          cities={cities}
+          category={category}
+          city={city}
+          filteredLeads={filteredLeads}
+          importHistory={importHistory}
+          metrics={metrics}
+          minScore={minScore}
+          searchTerm={searchTerm}
+          sheetsWebhookUrl={sheetsWebhookUrl}
+          onCategoryChange={setCategory}
+          onCityChange={setCity}
+          onMinScoreChange={setMinScore}
+          onSearchTermChange={setSearchTerm}
+          onSheetsWebhookUrlChange={setSheetsWebhookUrl}
+          onStatusChange={updateLeadStatus}
+        />
       ) : (
-      <section className="scrape-runs" aria-labelledby="scrape-runs-title">
-        <div className="scrape-runs-heading">
-          <Activity size={18} />
-          <div>
-            <h2 id="scrape-runs-title">Scrape runs</h2>
-            <p>Recent worker jobs, progress counts, and summary logs.</p>
-          </div>
-          <button className="ghost-button" type="button" onClick={createFakeScrapeRun}>
-            <PlayCircle size={17} />
-            Create manual run
-          </button>
-        </div>
-
-        <div className="scrape-operator">
-          <label>
-            <span>Source</span>
-            <input type="text" value="OpenStreetMap / Overpass" readOnly />
-          </label>
-          <label>
-            <span>Category</span>
-            <select
-              value={scrapeCategory}
-              onChange={(event) => setScrapeCategory(event.target.value as (typeof scraperCategories)[number])}
-            >
-              {scraperCategories.map((item) => (
-                <option key={item}>{item}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            <span>Location</span>
-            <input value={scrapeLocation} onChange={(event) => setScrapeLocation(event.target.value)} />
-          </label>
-          <label>
-            <span>Country</span>
-            <input
-              maxLength={2}
-              value={scrapeCountryCode}
-              onChange={(event) => setScrapeCountryCode(event.target.value.toUpperCase())}
-            />
-          </label>
-          <label>
-            <span>Max results</span>
-            <input
-              min={1}
-              max={50}
-              type="number"
-              value={scrapeMaxResults}
-              onChange={(event) => setScrapeMaxResults(Number(event.target.value))}
-            />
-          </label>
-          <button className="primary-button" type="button" onClick={queueScrapeRun}>
-            <PlayCircle size={17} />
-            Queue scrape run
-          </button>
-          <p>Public Overpass source, capped at 50 records, no proxy rotation or bypass logic.</p>
-        </div>
-
-        <div className="scrape-run-list">
-          {(scrapeRuns ?? []).length > 0 ? (
-            scrapeRuns?.map((run) => (
-              <article className="scrape-run" key={run._id}>
-                <div className="scrape-run-title">
-                  <div>
-                    <strong>
-                      {run.targetCategory} / {run.targetLocation}
-                    </strong>
-                    <span>{new Date(run.createdAt).toLocaleString()}</span>
-                  </div>
-                  <span className={`run-pill ${run.status}`}>{run.status}</span>
-                </div>
-                <dl>
-                  <div>
-                    <dt>Max</dt>
-                    <dd>{run.maxPages ?? 1}</dd>
-                  </div>
-                  <div>
-                    <dt>Pages</dt>
-                    <dd>{run.pagesChecked}</dd>
-                  </div>
-                  <div>
-                    <dt>Found</dt>
-                    <dd>{run.leadsFound}</dd>
-                  </div>
-                  <div>
-                    <dt>Saved</dt>
-                    <dd>{run.leadsSaved}</dd>
-                  </div>
-                  <div>
-                    <dt>Duplicates</dt>
-                    <dd>{run.duplicatesSkipped}</dd>
-                  </div>
-                  <div>
-                    <dt>Failures</dt>
-                    <dd>{run.failures}</dd>
-                  </div>
-                </dl>
-                <p>{run.summary || run.logLines.at(-1) || 'No summary yet.'}</p>
-                <ul className="scrape-run-log">
-                  {run.logLines.slice(-3).map((line, index) => (
-                    <li key={`${run._id}-${index}-${line}`}>{line}</li>
-                  ))}
-                </ul>
-              </article>
-            ))
-          ) : (
-            <p className="empty-scrape-runs">
-              {scrapeRuns === undefined ? 'Loading scrape runs...' : 'No scrape runs recorded yet.'}
-            </p>
-          )}
-        </div>
-      </section>
+        <ScraperRunsPage
+          countryCode={scrapeCountryCode}
+          category={scrapeCategory}
+          location={scrapeLocation}
+          maxResults={scrapeMaxResults}
+          scrapeRuns={scrapeRuns}
+          onCategoryChange={setScrapeCategory}
+          onCountryCodeChange={(value) => setScrapeCountryCode(value.toUpperCase())}
+          onCreateManualRun={createFakeScrapeRun}
+          onLocationChange={setScrapeLocation}
+          onMaxResultsChange={setScrapeMaxResults}
+          onQueueRun={queueScrapeRun}
+        />
       )}
     </main>
   )
