@@ -11,6 +11,7 @@
 .topbar-actions,
 .brand,
 .run-status,
+.import-history-heading,
 .search-field,
 .select-field,
 .score-field {
@@ -162,12 +163,102 @@ h2 {
 .import-status {
   width: fit-content;
   max-width: 760px;
-  margin: 0 0 24px;
+  margin: 0 0 14px;
   padding: 9px 12px;
   border: 1px solid rgba(15, 138, 166, 0.24);
   border-radius: 6px;
   color: var(--accent-strong);
   background: rgba(225, 244, 248, 0.66);
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.import-history {
+  margin-bottom: 18px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: rgba(251, 252, 253, 0.9);
+}
+
+.import-history-heading {
+  gap: 10px;
+  margin-bottom: 12px;
+  color: var(--accent-strong);
+}
+
+.import-history-heading h2 {
+  font-size: 16px;
+}
+
+.import-history-heading p {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.import-history-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.import-record {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.import-record strong,
+.import-record span {
+  display: block;
+}
+
+.import-record strong {
+  color: var(--ink);
+}
+
+.import-record span {
+  margin-top: 3px;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.import-record dl {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.import-record dt,
+.import-record dd {
+  margin: 0;
+  font-family: var(--mono);
+}
+
+.import-record dt {
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.import-record dd {
+  color: var(--ink);
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.empty-import-history {
+  grid-column: 1 / -1;
+  color: var(--muted);
   font-family: var(--mono);
   font-size: 13px;
   font-weight: 700;
@@ -455,6 +546,10 @@ tbody tr:last-child td {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .import-history-list {
+    grid-template-columns: 1fr;
+  }
+
   .score-field {
     flex: 1 1 100%;
   }
@@ -463,6 +558,10 @@ tbody tr:last-child td {
 @media (max-width: 560px) {
   .metrics-grid {
     grid-template-columns: 1fr;
+  }
+
+  .import-record dl {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .topbar-actions {

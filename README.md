@@ -18,6 +18,7 @@ It is designed as a portfolio-ready Upwork demo for a **Business Directory Lead 
 - Review enrichment signals like email found, booking link, social links, outdated website, and CRM gaps
 - Import real lead files from CSV
 - Persist imported leads and status changes in Convex
+- Review recent CSV import batches with created, duplicate, and invalid row counts
 - Update lead status across New, Contacted, Qualified, and Rejected
 - Export the filtered result set to CSV
 - Track operational metrics including visible leads, qualified leads, average score, and emails found
@@ -118,6 +119,19 @@ Email found; Booking link; Outdated website
 
 If `Score` is missing, the app calculates a score from available email, phone, website, source URL, and enrichment signals.
 
+## Import Pipeline
+
+CSV files are parsed in the browser so users get immediate file handling, then normalized lead rows are sent to the Convex `leads.importMany` mutation. Convex validates required fields before saving, computes the canonical deduplication key from business name, city, email, and phone, and checks both the current import batch and existing `leads` records before inserting.
+
+Each upload writes an `imports` record with:
+
+- rows received
+- leads created
+- duplicates skipped
+- invalid rows skipped
+
+The dashboard shows the latest import batches above the lead metrics, and status edits on imported leads persist through Convex.
+
 ## Convex Data Model
 
 The backend schema lives in `convex/schema.ts` and defines the foundation for the production pipeline:
@@ -127,7 +141,7 @@ The backend schema lives in `convex/schema.ts` and defines the foundation for th
 - `scrapeRuns`: scraper job metadata, progress counts, status, and logs
 - `leadSources`: configured source directories or CSV sources
 
-The dashboard reads leads through Convex queries and writes CSV imports, status changes, and demo resets through Convex mutations.
+The dashboard reads leads and import history through Convex queries and writes CSV imports, status changes, and demo resets through Convex mutations.
 
 ## Production Roadmap
 

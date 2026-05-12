@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   Filter,
   Globe2,
+  History,
   Mail,
   MapPin,
   Phone,
@@ -39,7 +40,7 @@ type Lead = {
 }
 
 const rowSchema = z.record(z.string(), z.unknown())
-type LeadInput = Omit<Lead, 'id'> & { dedupKey: string }
+type LeadInput = Omit<Lead, 'id'>
 
 const demoLeads: Lead[] = [
   {
@@ -235,13 +236,6 @@ const buildLeadFromRecord = (record: Record<string, unknown>): Lead | null => {
   }
 }
 
-const getDedupKey = (lead: Lead) =>
-  [lead.businessName, lead.city, lead.email || lead.phone]
-    .join('|')
-    .toLowerCase()
-    .replace(/\s+/g, ' ')
-    .trim()
-
 const toLeadInput = (lead: Lead): LeadInput => {
   return {
     businessName: lead.businessName,
@@ -256,7 +250,6 @@ const toLeadInput = (lead: Lead): LeadInput => {
     score: lead.score,
     signals: lead.signals,
     status: lead.status,
-    dedupKey: getDedupKey(lead),
   }
 }
 
@@ -286,6 +279,7 @@ function App() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const hasRequestedDemoSeed = useRef(false)
   const convexLeads = useQuery(api.leads.list)
+  const importHistory = useQuery(api.leads.listImports)
   const importLeads = useMutation(api.leads.importMany)
   const updateLeadStatusMutation = useMutation(api.leads.updateStatus)
   const replaceWithDemoData = useMutation(api.leads.replaceWithDemoData)
@@ -399,7 +393,9 @@ function App() {
             result.leadsCreated === 0
               ? `No new leads imported from ${file.name}.`
               : `Imported ${result.leadsCreated} leads from ${file.name}.`
-          setImportMessage(`${prefix} ${result.duplicatesSkipped} duplicates skipped.`)
+          setImportMessage(
+            `${prefix} ${result.duplicatesSkipped} duplicates skipped, ${result.invalidRowsSkipped} invalid rows skipped.`,
+          )
           setCategory('All categories')
           setCity('All cities')
         } catch (error) {
@@ -521,6 +517,51 @@ function App() {
       <p className="import-status" role="status">
         {statusMessage}
       </p>
+
+      <section className="import-history" aria-labelledby="import-history-title">
+        <div className="import-history-heading">
+          <History size={18} />
+          <div>
+            <h2 id="import-history-title">Import history</h2>
+            <p>Latest backend import batches and validation counts.</p>
+          </div>
+        </div>
+
+        <div className="import-history-list">
+          {(importHistory ?? []).length > 0 ? (
+            importHistory?.map((importRecord) => (
+              <article className="import-record" key={importRecord._id}>
+                <div>
+                  <strong>{importRecord.fileName}</strong>
+                  <span>{new Date(importRecord.createdAt).toLocaleString()}</span>
+                </div>
+                <dl>
+                  <div>
+                    <dt>Rows</dt>
+                    <dd>{importRecord.rowsReceived}</dd>
+                  </div>
+                  <div>
+                    <dt>Created</dt>
+                    <dd>{importRecord.leadsCreated}</dd>
+                  </div>
+                  <div>
+                    <dt>Duplicates</dt>
+                    <dd>{importRecord.duplicatesSkipped}</dd>
+                  </div>
+                  <div>
+                    <dt>Invalid</dt>
+                    <dd>{importRecord.invalidRowsSkipped}</dd>
+                  </div>
+                </dl>
+              </article>
+            ))
+          ) : (
+            <p className="empty-import-history">
+              {importHistory === undefined ? 'Loading import history...' : 'No CSV imports recorded yet.'}
+            </p>
+          )}
+        </div>
+      </section>
 
       <section className="metrics-grid" aria-label="Lead metrics">
         <article className="metric">
