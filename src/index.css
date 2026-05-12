@@ -1,22 +1,31 @@
 :root {
-  --ink: #14262b;
-  --muted: #657272;
-  --surface: #f5f2eb;
-  --line: #ded8cc;
-  --accent: #d96432;
-  --good: #277264;
-  --heading: Georgia, 'Times New Roman', serif;
-  --body: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  --ink: #101820;
+  --muted: #5f6b78;
+  --surface: #eef3f6;
+  --panel: #fbfcfd;
+  --line: #cfd9e1;
+  --accent: #0f8aa6;
+  --accent-strong: #08677f;
+  --amber: #c47618;
+  --good: #177a68;
+  --heading: 'Bahnschrift', 'Aptos Display', 'Segoe UI', sans-serif;
+  --body: 'Aptos', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  --mono: 'Cascadia Code', 'SFMono-Regular', Consolas, monospace;
 
   font-family: var(--body);
   line-height: 1.5;
   font-weight: 500;
   color: var(--ink);
   background:
-    linear-gradient(90deg, rgba(20, 38, 43, 0.04) 1px, transparent 1px),
-    linear-gradient(180deg, rgba(20, 38, 43, 0.04) 1px, transparent 1px),
-    #f3efe6;
-  background-size: 48px 48px;
+    radial-gradient(circle at 18% 0%, rgba(15, 138, 166, 0.12), transparent 30%),
+    linear-gradient(90deg, rgba(16, 24, 32, 0.045) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(16, 24, 32, 0.045) 1px, transparent 1px),
+    #eef2f5;
+  background-size:
+    auto,
+    40px 40px,
+    40px 40px,
+    auto;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
