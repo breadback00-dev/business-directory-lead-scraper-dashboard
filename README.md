@@ -16,6 +16,8 @@ It is designed as a portfolio-ready Upwork demo for a **Business Directory Lead 
 - Filter by business category and city
 - Adjust the minimum lead score with a range control
 - Review enrichment signals like email found, booking link, social links, outdated website, and CRM gaps
+- Import real lead files from CSV
+- Persist imported leads and status changes in browser storage
 - Update lead status across New, Contacted, Qualified, and Rejected
 - Export the filtered result set to CSV
 - Track operational metrics including visible leads, qualified leads, average score, and emails found
@@ -26,6 +28,8 @@ It is designed as a portfolio-ready Upwork demo for a **Business Directory Lead 
 - React
 - TypeScript
 - Vite
+- PapaParse for CSV import
+- Zod for import validation
 - Lucide React icons
 - CSS modules through standard app styles
 
@@ -58,11 +62,40 @@ npm run preview
 ## Demo Workflow
 
 1. Open the dashboard.
-2. Search for a business type, city, email, or signal.
-3. Filter by category or city.
-4. Raise or lower the minimum score.
-5. Change a lead status.
-6. Export the filtered leads to CSV.
+2. Click **Import CSV** and select `sample-leads.csv`.
+3. Search for a business type, city, email, or signal.
+4. Filter by category or city.
+5. Raise or lower the minimum score.
+6. Change a lead status.
+7. Refresh the browser to confirm imported leads and statuses persist.
+8. Export the filtered leads to CSV.
+
+## CSV Import Format
+
+The importer accepts friendly column names and normalizes them internally.
+
+Recommended headers:
+
+```csv
+Business Name,Category,City,Directory,Website,Email,Phone,Address,Score,Status,Signals,Source URL
+```
+
+Supported aliases include:
+
+- `Business Name`, `Company`, or `Name`
+- `Category`, `Industry`, or `Business Type`
+- `City`, `Location`, `Town`, or `Market`
+- `Directory`, `Source`, or `Lead Source`
+- `Phone`, `Phone Number`, or `Telephone`
+- `Source URL`, `Directory URL`, or `Listing URL`
+
+`Signals` can be separated with semicolons, for example:
+
+```csv
+Email found; Booking link; Outdated website
+```
+
+If `Score` is missing, the app calculates a score from available email, phone, website, source URL, and enrichment signals.
 
 ## Production Roadmap
 
@@ -70,7 +103,7 @@ This frontend is ready to connect to a real scraper pipeline. A production versi
 
 - Directory-specific scraper adapters
 - Job queue for scraping runs
-- Database storage for leads and scrape history
+- Backend API and database storage for leads and scrape history
 - Deduplication across directories
 - Website crawling for email, social, and contact-page enrichment
 - Lead scoring rules configurable per client

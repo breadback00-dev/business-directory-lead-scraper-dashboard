@@ -1,0 +1,4 @@
+Business Name,Category,City,Directory,Website,Email,Phone,Address,Score,Status,Signals,Source URL
+Meridian Solar Works,Renewable Energy,Phoenix,Green Trades Index,meridiansolar.example,hello@meridiansolar.example,+1 602 555 0188,"120 N Central Ave, Phoenix",89,New,"Email found; High-value category; Quote form",https://directory.example/meridian-solar-works
+Forge Street Kitchens,Restaurants,Bristol,Hospitality Register,forgestreetkitchens.example,bookings@forgestreetkitchens.example,+44 117 555 0155,"14 Queen Square, Bristol",76,Contacted,"Booking link; Instagram found",https://directory.example/forge-street-kitchens
+Axis Fleet Repair,Automotive,Detroit,Commercial Services Hub,axisfleetrepair.example,service@axisfleetrepair.example,+1 313 555 0161,"88 Woodward Ave, Detroit",84,Qualified,"Phone verified; B2B service; Contact form",https://directory.example/axis-fleet-repair

@@ -1,4 +1,6 @@
-import { useMemo, useState } from 'react'
+import { type ChangeEvent, useEffect, useMemo, useRef, useState } from 'react'
+import Papa from 'papaparse'
+import { z } from 'zod'
 import {
   ArrowDownToLine,
   Building2,
@@ -8,15 +10,17 @@ import {
   Mail,
   MapPin,
   Phone,
+  RotateCcw,
   Search,
   UploadCloud,
 } from 'lucide-react'
 import './App.css'
 
-type LeadStatus = 'New' | 'Contacted' | 'Qualified' | 'Rejected'
+const statuses = ['New', 'Contacted', 'Qualified', 'Rejected'] as const
+type LeadStatus = (typeof statuses)[number]
 
 type Lead = {
-  id: number
+  id: string
   businessName: string
   category: string
   city: string
@@ -31,9 +35,29 @@ type Lead = {
   status: LeadStatus
 }
 
-const leads: Lead[] = [
+const leadSchema = z.object({
+  id: z.string(),
+  businessName: z.string(),
+  category: z.string(),
+  city: z.string(),
+  directory: z.string(),
+  website: z.string(),
+  email: z.string(),
+  phone: z.string(),
+  address: z.string(),
+  sourceUrl: z.string(),
+  score: z.number(),
+  signals: z.array(z.string()),
+  status: z.enum(statuses),
+})
+
+const rowSchema = z.record(z.string(), z.unknown())
+const leadListSchema = z.array(leadSchema)
+const LEADS_STORAGE_KEY = 'leadvault:leads'
+
+const demoLeads: Lead[] = [
   {
-    id: 1,
+    id: 'demo-1',
     businessName: 'Northline Dental Studio',
     category: 'Dentists',
     city: 'Manchester',
@@ -48,7 +72,7 @@ const leads: Lead[] = [
     status: 'New',
   },
   {
-    id: 2,
+    id: 'demo-2',
     businessName: 'Summit Roof Care',
     category: 'Roofing',
     city: 'Austin',
@@ -63,7 +87,7 @@ const leads: Lead[] = [
     status: 'Qualified',
   },
   {
-    id: 3,
+    id: 'demo-3',
     businessName: 'Cedar & Co Accountants',
     category: 'Accounting',
     city: 'London',
@@ -78,7 +102,7 @@ const leads: Lead[] = [
     status: 'Contacted',
   },
   {
-    id: 4,
+    id: 'demo-4',
     businessName: 'Bluebird Family Clinic',
     category: 'Healthcare',
     city: 'Birmingham',
@@ -93,7 +117,7 @@ const leads: Lead[] = [
     status: 'New',
   },
   {
-    id: 5,
+    id: 'demo-5',
     businessName: 'Harbor View Legal',
     category: 'Legal',
     city: 'Liverpool',
@@ -108,7 +132,7 @@ const leads: Lead[] = [
     status: 'Rejected',
   },
   {
-    id: 6,
+    id: 'demo-6',
     businessName: 'Oak & Pixel Web Studio',
     category: 'Marketing',
     city: 'Leeds',
@@ -123,7 +147,7 @@ const leads: Lead[] = [
     status: 'Qualified',
   },
   {
-    id: 7,
+    id: 'demo-7',
     businessName: 'BrightPath Tutoring',
     category: 'Education',
     city: 'Chicago',
@@ -138,7 +162,7 @@ const leads: Lead[] = [
     status: 'New',
   },
   {
-    id: 8,
+    id: 'demo-8',
     businessName: 'Pinecrest Fitness',
     category: 'Fitness',
     city: 'Denver',
@@ -154,9 +178,95 @@ const leads: Lead[] = [
   },
 ]
 
-const statuses: LeadStatus[] = ['New', 'Contacted', 'Qualified', 'Rejected']
-const categories = ['All categories', ...Array.from(new Set(leads.map((lead) => lead.category)))]
-const cities = ['All cities', ...Array.from(new Set(leads.map((lead) => lead.city)))]
+const normalizeKey = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, '')
+const csvEscape = (value: string | number) => `"${String(value).replaceAll('"', '""')}"`
+
+const uniqueOptions = (items: string[]) => Array.from(new Set(items.filter(Boolean))).sort()
+
+const getStoredLeads = () => {
+  try {
+    const stored = window.localStorage.getItem(LEADS_STORAGE_KEY)
+    if (!stored) return demoLeads
+
+    const parsed = leadListSchema.safeParse(JSON.parse(stored))
+    return parsed.success ? parsed.data : demoLeads
+  } catch {
+    return demoLeads
+  }
+}
+
+const getRecordValue = (record: Record<string, unknown>, aliases: string[]) => {
+  const normalizedRecord = Object.fromEntries(
+    Object.entries(record).map(([key, value]) => [normalizeKey(key), String(value ?? '').trim()]),
+  )
+
+  for (const alias of aliases) {
+    const value = normalizedRecord[normalizeKey(alias)]
+    if (value) return value
+  }
+
+  return ''
+}
+
+const parseSignals = (value: string) =>
+  value
+    .split(/[;|]/)
+    .map((signal) => signal.trim())
+    .filter(Boolean)
+
+const normalizeStatus = (value: string): LeadStatus =>
+  statuses.find((status) => status.toLowerCase() === value.toLowerCase()) ?? 'New'
+
+const generateId = () =>
+  typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `lead-${Date.now()}-${Math.random().toString(16).slice(2)}`
+
+const calculateScore = (lead: Omit<Lead, 'id' | 'score' | 'status'>) => {
+  const score =
+    45 +
+    (lead.email ? 18 : 0) +
+    (lead.phone ? 10 : 0) +
+    (lead.website ? 12 : 0) +
+    (lead.sourceUrl ? 5 : 0) +
+    Math.min(10, lead.signals.length * 3)
+
+  return Math.min(100, score)
+}
+
+const buildLeadFromRecord = (record: Record<string, unknown>): Lead | null => {
+  const businessName = getRecordValue(record, ['Business Name', 'Company', 'Name'])
+  if (!businessName) return null
+
+  const baseLead = {
+    businessName,
+    category: getRecordValue(record, ['Category', 'Industry', 'Business Type']) || 'Uncategorized',
+    city: getRecordValue(record, ['City', 'Location', 'Town', 'Market']) || 'Unknown city',
+    directory: getRecordValue(record, ['Directory', 'Source', 'Lead Source']) || 'CSV import',
+    website: getRecordValue(record, ['Website', 'Domain', 'URL']),
+    email: getRecordValue(record, ['Email', 'Email Address']),
+    phone: getRecordValue(record, ['Phone', 'Phone Number', 'Telephone']),
+    address: getRecordValue(record, ['Address', 'Street Address']),
+    sourceUrl: getRecordValue(record, ['Source URL', 'Directory URL', 'Listing URL']),
+    signals: parseSignals(getRecordValue(record, ['Signals', 'Tags', 'Notes'])),
+  }
+  const scoreValue = Number(getRecordValue(record, ['Score', 'Lead Score']))
+  const score = Number.isFinite(scoreValue) ? Math.max(0, Math.min(100, scoreValue)) : calculateScore(baseLead)
+
+  return {
+    ...baseLead,
+    id: generateId(),
+    score,
+    status: normalizeStatus(getRecordValue(record, ['Status', 'Lead Status'])),
+  }
+}
+
+const getDedupKey = (lead: Lead) =>
+  [lead.businessName, lead.city, lead.email || lead.phone]
+    .join('|')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim()
 
 const scoreLabel = (score: number) => {
   if (score >= 85) return 'Hot'
@@ -164,25 +274,32 @@ const scoreLabel = (score: number) => {
   return 'Nurture'
 }
 
-const csvEscape = (value: string | number) => `"${String(value).replaceAll('"', '""')}"`
-
 function App() {
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [leadData, setLeadData] = useState<Lead[]>(getStoredLeads)
   const [searchTerm, setSearchTerm] = useState('')
   const [category, setCategory] = useState('All categories')
   const [city, setCity] = useState('All cities')
   const [minScore, setMinScore] = useState(60)
-  const [leadStatuses, setLeadStatuses] = useState<Record<number, LeadStatus>>(
-    () => Object.fromEntries(leads.map((lead) => [lead.id, lead.status])),
+  const [importMessage, setImportMessage] = useState('Demo data loaded. Import a CSV to replace it with client leads.')
+
+  useEffect(() => {
+    window.localStorage.setItem(LEADS_STORAGE_KEY, JSON.stringify(leadData))
+  }, [leadData])
+
+  const categories = useMemo(
+    () => ['All categories', ...uniqueOptions(leadData.map((lead) => lead.category))],
+    [leadData],
+  )
+  const cities = useMemo(
+    () => ['All cities', ...uniqueOptions(leadData.map((lead) => lead.city))],
+    [leadData],
   )
 
   const filteredLeads = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase()
 
-    return leads
-      .map((lead) => ({
-        ...lead,
-        status: leadStatuses[lead.id] ?? lead.status,
-      }))
+    return leadData
       .filter((lead) => {
         const matchesSearch =
           normalizedSearch.length === 0 ||
@@ -192,6 +309,7 @@ function App() {
             lead.city,
             lead.directory,
             lead.email,
+            lead.phone,
             lead.signals.join(' '),
           ]
             .join(' ')
@@ -204,7 +322,7 @@ function App() {
         return matchesSearch && matchesCategory && matchesCity && matchesScore
       })
       .sort((a, b) => b.score - a.score)
-  }, [category, city, leadStatuses, minScore, searchTerm])
+  }, [category, city, leadData, minScore, searchTerm])
 
   const metrics = useMemo(() => {
     const visible = filteredLeads.length
@@ -217,6 +335,63 @@ function App() {
 
     return { visible, qualified, averageScore, emails }
   }, [filteredLeads])
+
+  const handleImport = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: (results) => {
+        const rows = results.data
+          .map((row) => rowSchema.safeParse(row))
+          .filter((result) => result.success)
+          .map((result) => result.data)
+        const importedLeads = rows
+          .map((row) => buildLeadFromRecord(row))
+          .filter((lead): lead is Lead => Boolean(lead))
+        const existingKeys = new Set(leadData.map(getDedupKey))
+        const newLeads = importedLeads.filter((lead) => {
+          const key = getDedupKey(lead)
+          if (existingKeys.has(key)) return false
+          existingKeys.add(key)
+          return true
+        })
+
+        if (newLeads.length === 0) {
+          setImportMessage(`No new leads imported from ${file.name}. Check required name/company fields.`)
+          event.target.value = ''
+          return
+        }
+
+        setLeadData((current) => [...newLeads, ...current])
+        setImportMessage(`Imported ${newLeads.length} leads from ${file.name}. ${importedLeads.length - newLeads.length} duplicates skipped.`)
+        setCategory('All categories')
+        setCity('All cities')
+        event.target.value = ''
+      },
+      error: (error) => {
+        setImportMessage(`Import failed: ${error.message}`)
+        event.target.value = ''
+      },
+    })
+  }
+
+  const updateLeadStatus = (leadId: string, status: LeadStatus) => {
+    setLeadData((current) =>
+      current.map((lead) => (lead.id === leadId ? { ...lead, status } : lead)),
+    )
+  }
+
+  const resetDemoData = () => {
+    setLeadData(demoLeads)
+    setCategory('All categories')
+    setCity('All cities')
+    setSearchTerm('')
+    setMinScore(60)
+    setImportMessage('Demo data restored.')
+  }
 
   const exportCsv = () => {
     const headers = [
@@ -269,9 +444,19 @@ function App() {
           <span>LeadVault</span>
         </div>
         <div className="topbar-actions">
-          <button className="ghost-button" type="button">
+          <input
+            ref={fileInputRef}
+            className="sr-only"
+            type="file"
+            accept=".csv,text/csv"
+            onChange={handleImport}
+          />
+          <button className="ghost-button" type="button" onClick={() => fileInputRef.current?.click()}>
             <UploadCloud size={17} />
-            Import targets
+            Import CSV
+          </button>
+          <button className="ghost-button icon-button" type="button" onClick={resetDemoData} aria-label="Reset demo data">
+            <RotateCcw size={17} />
           </button>
           <button className="primary-button" type="button" onClick={exportCsv}>
             <ArrowDownToLine size={17} />
@@ -287,9 +472,13 @@ function App() {
         </div>
         <div className="run-status" aria-label="Latest scraper run status">
           <CheckCircle2 size={18} />
-          <span>Last run: 842 records checked</span>
+          <span>{leadData.length} records loaded</span>
         </div>
       </section>
+
+      <p className="import-status" role="status">
+        {importMessage}
+      </p>
 
       <section className="metrics-grid" aria-label="Lead metrics">
         <article className="metric">
@@ -390,19 +579,19 @@ function App() {
                   <td>
                     <div className="contact-cell">
                       <span>
-                        <Mail size={14} /> {lead.email}
+                        <Mail size={14} /> {lead.email || 'No email'}
                       </span>
                       <span>
-                        <Phone size={14} /> {lead.phone}
+                        <Phone size={14} /> {lead.phone || 'No phone'}
                       </span>
                       <span>
-                        <Globe2 size={14} /> {lead.website}
+                        <Globe2 size={14} /> {lead.website || 'No website'}
                       </span>
                     </div>
                   </td>
                   <td>
                     <div className="signal-list">
-                      {lead.signals.map((signal) => (
+                      {(lead.signals.length > 0 ? lead.signals : ['No signals yet']).map((signal) => (
                         <span key={signal}>{signal}</span>
                       ))}
                     </div>
@@ -419,12 +608,7 @@ function App() {
                     <select
                       className="status-select"
                       value={lead.status}
-                      onChange={(event) =>
-                        setLeadStatuses((current) => ({
-                          ...current,
-                          [lead.id]: event.target.value as LeadStatus,
-                        }))
-                      }
+                      onChange={(event) => updateLeadStatus(lead.id, event.target.value as LeadStatus)}
                     >
                       {statuses.map((status) => (
                         <option key={status}>{status}</option>
