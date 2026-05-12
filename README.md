@@ -1,14 +1,28 @@
 # Business Directory Lead Scraper Dashboard
 
-A Level 6 lead-generation dashboard that shows how scraped business directory data can become a practical sales workspace. The app lets a client review enriched leads, filter by market, adjust quality thresholds, update outreach status, and export the current view as a CSV.
+A portfolio-ready lead-generation system for turning business directory data into a sales workspace. It collects directory leads, enriches homepages for contact signals, deduplicates records, scores lead quality, and gives clients a dashboard for filtering, qualifying, and exporting prospects.
+
+## Client Offer
+
+> I build compliant business-directory lead scrapers that collect companies by category and location, enrich each record with website contact signals, remove duplicates, score lead quality, and deliver the results in a dashboard or Google Sheet your sales team can use immediately.
+
+This demo is designed for B2B agencies, local SEO/web-design shops, vertical SaaS sellers, and founders who need repeatable prospect lists without risky source-bypass tactics.
+
+## Outcome Examples
+
+- `Manchester dentists` -> 5 OpenStreetMap leads scraped, 5 duplicates skipped on repeat run, homepage enrichment found emails, contact pages, social links, and booking signals.
+- `Local SEO agency workflow` -> filter for businesses with websites, weak contact signals, or missing booking/contact paths, then export qualified leads to Google Sheets.
+- `Outbound agency workflow` -> import a client CSV, deduplicate it against scraped leads, score the combined list, and export only high-fit prospects.
 
 ![Business Directory Lead Scraper dashboard](./dashboard-screenshot.png)
+
+Demo video: add a 30-second Loom walkthrough link here.
 
 ## Why This Project Exists
 
 Most scraper demos stop at a raw spreadsheet. This project demonstrates the next step: a client-facing dashboard where scraped records become usable sales intelligence.
 
-It is designed as a portfolio-ready Upwork demo for a **Business Directory Lead Scraper** service.
+The implementation also treats compliance as a product feature: the first production adapter uses OpenStreetMap/Overpass with attribution and conservative limits, rather than proxy rotation or bypass logic.
 
 ## Features
 
@@ -84,13 +98,12 @@ npm run preview
 ## Demo Workflow
 
 1. Open the dashboard.
-2. Click **Import CSV** and select `sample-leads.csv`.
-3. Search for a business type, city, email, or signal.
-4. Filter by category or city.
-5. Raise or lower the minimum score.
-6. Change a lead status.
-7. Refresh the browser to confirm imported leads and statuses persist from Convex.
-8. Export the filtered leads to CSV.
+2. Run the OpenStreetMap worker for a category and city, or import `sample-leads.csv`.
+3. Run homepage enrichment to find emails, contact pages, social links, and booking/contact signals.
+4. Search for a business type, city, email, or signal.
+5. Filter by category or city and raise or lower the minimum score.
+6. Change a lead status as the sales team qualifies the list.
+7. Export the filtered leads to CSV or send them to a configured Google Sheets webhook.
 
 ## CSV Import Format
 
@@ -281,10 +294,6 @@ This frontend is ready to connect to a real scraper pipeline. A production versi
 - Google Sheets, Airtable, HubSpot, or Pipedrive export
 - Authentication and saved client workspaces
 
-## Client Pitch
-
-> I can build a lead scraper that collects businesses from directories, enriches each lead by visiting their website, extracts emails and contact signals, removes duplicates, scores lead quality, and gives you a dashboard where you can filter, qualify, and export the best leads.
-
 ## Project Status
 
-This is a polished dashboard demo backed by Convex for lead storage. The remaining production work is the scraper and enrichment pipeline that will populate the same lead tables.
+This is a polished dashboard demo backed by Convex for lead storage, a working OpenStreetMap scraper adapter, homepage enrichment, and Google Sheets webhook export. The next production step is a dashboard-triggered operator flow for configuring and running scraper jobs without the command line.
