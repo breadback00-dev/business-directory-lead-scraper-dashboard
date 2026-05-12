@@ -28,6 +28,7 @@ It is designed as a portfolio-ready Upwork demo for a **Business Directory Lead 
 - React
 - TypeScript
 - Vite
+- Convex for the backend/database foundation
 - PapaParse for CSV import
 - Zod for import validation
 - Lucide React icons
@@ -41,10 +42,30 @@ Install dependencies:
 npm install
 ```
 
+Create local environment variables:
+
+```bash
+cp .env.example .env.local
+```
+
+Configure Convex:
+
+```bash
+npm run convex:dev
+```
+
+The first Convex run will prompt you to log in, create or select a project, and write the deployment values used by the app.
+
 Run the development server:
 
 ```bash
 npm run dev
+```
+
+Or run Convex and Vite together:
+
+```bash
+npm run dev:full
 ```
 
 Create a production build:
@@ -96,6 +117,17 @@ Email found; Booking link; Outdated website
 ```
 
 If `Score` is missing, the app calculates a score from available email, phone, website, source URL, and enrichment signals.
+
+## Convex Data Model
+
+The backend schema lives in `convex/schema.ts` and defines the foundation for the production pipeline:
+
+- `leads`: normalized lead records, status, score, source references, and deduplication key
+- `imports`: CSV import batches and import result counts
+- `scrapeRuns`: scraper job metadata, progress counts, status, and logs
+- `leadSources`: configured source directories or CSV sources
+
+The current UI still works with browser persistence while the Convex migration is phased in. The next phase replaces local lead state with Convex queries and mutations.
 
 ## Production Roadmap
 
