@@ -648,7 +648,7 @@ function App() {
           <strong>{metrics.averageScore}</strong>
         </article>
         <article className="metric">
-          <span>Emails found</span>
+          <span>Email-ready leads</span>
           <strong>{metrics.emails}</strong>
         </article>
       </section>
@@ -702,7 +702,7 @@ function App() {
         <div className="table-heading">
           <div>
             <h2 id="lead-table-title">Sales-ready leads</h2>
-            <p>Sorted by lead score with enrichment signals from directory and website checks.</p>
+            <p>Sorted by lead score with directory and homepage enrichment signals.</p>
           </div>
           <span>{filteredLeads.length} matches</span>
         </div>

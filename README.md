@@ -192,6 +192,37 @@ CONVEX_URL="https://your-deployment.convex.cloud" npm run scrape:osm -- --catego
 
 `VITE_CONVEX_URL` also works if it is already exported in the shell. In write mode, the worker creates a scrape run, marks it running, writes leads through `scrapeRuns.recordLead`, then completes the run with saved and duplicate counts. Duplicate handling stays inside Convex so repeated worker runs do not create duplicate leads.
 
+## Homepage Enrichment Worker
+
+The first enrichment worker is `scripts/homepageEnrichmentWorker.js`. It visits business homepages already stored on leads, extracts lightweight sales signals, and writes the results back through Convex. It intentionally checks only the homepage in this phase: no login walls, no bypassing, no aggressive crawling, and no contact-form submission.
+
+Detected signals:
+
+- email addresses on the homepage
+- contact or enquiry page links
+- social profile links
+- booking, appointment, or contact-form language
+
+Dry-run one website without reading or writing Convex:
+
+```bash
+npm run enrich:homepage -- --url "https://www.avaloncaredentalpractice.co.uk/" --dry-run
+```
+
+Dry-run the latest Convex leads that have websites:
+
+```bash
+CONVEX_URL="https://your-deployment.convex.cloud" npm run enrich:homepage -- --limit 10 --dry-run
+```
+
+Write enrichment results to Convex:
+
+```bash
+CONVEX_URL="https://your-deployment.convex.cloud" npm run enrich:homepage -- --limit 10 --write
+```
+
+In write mode, the worker updates the lead email when a lead does not already have one, merges enrichment signals into the existing signal list, and raises the score based on found contact signals. Failed homepage fetches are logged and do not stop the rest of the run.
+
 ## Production Roadmap
 
 This frontend is ready to connect to a real scraper pipeline. A production version would typically add:

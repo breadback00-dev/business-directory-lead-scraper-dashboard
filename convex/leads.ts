@@ -23,6 +23,14 @@ const leadInput = v.object({
   status: leadStatus,
 })
 
+const enrichmentInput = v.object({
+  leadId: v.id('leads'),
+  email: v.optional(v.string()),
+  signals: v.array(v.string()),
+  scoreDelta: v.number(),
+  logLine: v.optional(v.string()),
+})
+
 const now = () => Date.now()
 const normalizeDedupValue = (value: string) => value.toLowerCase().replace(/\s+/g, ' ').trim()
 const buildDedupKey = (lead: { businessName: string; city: string; email: string; phone: string }) =>
@@ -71,6 +79,21 @@ export const listImports = query({
   args: {},
   handler: async (ctx) => {
     return await ctx.db.query('imports').withIndex('by_createdAt').order('desc').take(5)
+  },
+})
+
+export const listForEnrichment = query({
+  args: {
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const limit = Math.max(1, Math.min(50, Math.floor(args.limit ?? 10)))
+    const leads = await ctx.db.query('leads').collect()
+
+    return leads
+      .filter((lead) => lead.website.trim().length > 0)
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .slice(0, limit)
   },
 })
 
@@ -143,6 +166,45 @@ export const updateStatus = mutation({
       status: args.status,
       updatedAt: now(),
     })
+  },
+})
+
+export const applyHomepageEnrichment = mutation({
+  args: enrichmentInput,
+  handler: async (ctx, args) => {
+    const lead = await ctx.db.get(args.leadId)
+    if (!lead) throw new Error('Lead not found.')
+
+    const enrichedEmail = args.email?.trim()
+    const mergedSignals = Array.from(
+      new Set([
+        ...lead.signals.map((signal) => signal.trim()).filter(Boolean),
+        ...args.signals.map((signal) => signal.trim()).filter(Boolean),
+      ]),
+    )
+    const email = lead.email || enrichedEmail || ''
+    const scoreDelta = Math.max(0, Math.min(40, Math.floor(args.scoreDelta)))
+    const score = Math.min(100, Math.max(lead.score, lead.score + scoreDelta))
+    const dedupKey = buildDedupKey({ ...lead, email })
+    const dedupKeyMatch = await ctx.db
+      .query('leads')
+      .withIndex('by_dedupKey', (q) => q.eq('dedupKey', dedupKey))
+      .first()
+
+    await ctx.db.patch(args.leadId, {
+      email,
+      ...(dedupKeyMatch && dedupKeyMatch._id !== args.leadId ? {} : { dedupKey }),
+      score,
+      signals: mergedSignals,
+      updatedAt: now(),
+    })
+
+    return {
+      emailAdded: !lead.email && Boolean(enrichedEmail),
+      score,
+      signals: mergedSignals,
+      logLine: args.logLine,
+    }
   },
 })
 
