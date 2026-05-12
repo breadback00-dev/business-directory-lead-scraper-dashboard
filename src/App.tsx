@@ -1,6 +1,7 @@
 import { type ChangeEvent, useEffect, useMemo, useRef, useState } from 'react'
 import Papa from 'papaparse'
 import { z } from 'zod'
+import { useMutation, useQuery } from 'convex/react'
 import {
   ArrowDownToLine,
   Building2,
@@ -14,6 +15,8 @@ import {
   Search,
   UploadCloud,
 } from 'lucide-react'
+import { api } from '../convex/_generated/api'
+import type { Doc, Id } from '../convex/_generated/dataModel'
 import './App.css'
 
 const statuses = ['New', 'Contacted', 'Qualified', 'Rejected'] as const
@@ -35,25 +38,8 @@ type Lead = {
   status: LeadStatus
 }
 
-const leadSchema = z.object({
-  id: z.string(),
-  businessName: z.string(),
-  category: z.string(),
-  city: z.string(),
-  directory: z.string(),
-  website: z.string(),
-  email: z.string(),
-  phone: z.string(),
-  address: z.string(),
-  sourceUrl: z.string(),
-  score: z.number(),
-  signals: z.array(z.string()),
-  status: z.enum(statuses),
-})
-
 const rowSchema = z.record(z.string(), z.unknown())
-const leadListSchema = z.array(leadSchema)
-const LEADS_STORAGE_KEY = 'leadvault:leads'
+type LeadInput = Omit<Lead, 'id'> & { dedupKey: string }
 
 const demoLeads: Lead[] = [
   {
@@ -183,18 +169,6 @@ const csvEscape = (value: string | number) => `"${String(value).replaceAll('"', 
 
 const uniqueOptions = (items: string[]) => Array.from(new Set(items.filter(Boolean))).sort()
 
-const getStoredLeads = () => {
-  try {
-    const stored = window.localStorage.getItem(LEADS_STORAGE_KEY)
-    if (!stored) return demoLeads
-
-    const parsed = leadListSchema.safeParse(JSON.parse(stored))
-    return parsed.success ? parsed.data : demoLeads
-  } catch {
-    return demoLeads
-  }
-}
-
 const getRecordValue = (record: Record<string, unknown>, aliases: string[]) => {
   const normalizedRecord = Object.fromEntries(
     Object.entries(record).map(([key, value]) => [normalizeKey(key), String(value ?? '').trim()]),
@@ -268,6 +242,40 @@ const getDedupKey = (lead: Lead) =>
     .replace(/\s+/g, ' ')
     .trim()
 
+const toLeadInput = (lead: Lead): LeadInput => {
+  return {
+    businessName: lead.businessName,
+    category: lead.category,
+    city: lead.city,
+    directory: lead.directory,
+    website: lead.website,
+    email: lead.email,
+    phone: lead.phone,
+    address: lead.address,
+    sourceUrl: lead.sourceUrl,
+    score: lead.score,
+    signals: lead.signals,
+    status: lead.status,
+    dedupKey: getDedupKey(lead),
+  }
+}
+
+const toClientLead = (lead: Doc<'leads'>): Lead => ({
+  id: lead._id,
+  businessName: lead.businessName,
+  category: lead.category,
+  city: lead.city,
+  directory: lead.directory,
+  website: lead.website,
+  email: lead.email,
+  phone: lead.phone,
+  address: lead.address,
+  sourceUrl: lead.sourceUrl,
+  score: lead.score,
+  signals: lead.signals,
+  status: lead.status,
+})
+
 const scoreLabel = (score: number) => {
   if (score >= 85) return 'Hot'
   if (score >= 72) return 'Warm'
@@ -276,16 +284,39 @@ const scoreLabel = (score: number) => {
 
 function App() {
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const [leadData, setLeadData] = useState<Lead[]>(getStoredLeads)
+  const hasRequestedDemoSeed = useRef(false)
+  const convexLeads = useQuery(api.leads.list)
+  const importLeads = useMutation(api.leads.importMany)
+  const updateLeadStatusMutation = useMutation(api.leads.updateStatus)
+  const replaceWithDemoData = useMutation(api.leads.replaceWithDemoData)
   const [searchTerm, setSearchTerm] = useState('')
   const [category, setCategory] = useState('All categories')
   const [city, setCity] = useState('All cities')
   const [minScore, setMinScore] = useState(60)
-  const [importMessage, setImportMessage] = useState('Demo data loaded. Import a CSV to replace it with client leads.')
+  const [importMessage, setImportMessage] = useState<string | null>(null)
+
+  const leadData = useMemo(() => (convexLeads ?? []).map(toClientLead), [convexLeads])
+  const statusMessage =
+    importMessage ??
+    (convexLeads === undefined
+      ? 'Loading leads from Convex...'
+      : leadData.length > 0
+        ? 'Leads loaded from Convex. Import a CSV to add client leads.'
+        : 'Loading demo data into Convex...')
 
   useEffect(() => {
-    window.localStorage.setItem(LEADS_STORAGE_KEY, JSON.stringify(leadData))
-  }, [leadData])
+    if (convexLeads === undefined) return
+
+    if (convexLeads.length > 0 || hasRequestedDemoSeed.current) return
+
+    hasRequestedDemoSeed.current = true
+    void replaceWithDemoData({ leads: demoLeads.map(toLeadInput) })
+      .then(() => setImportMessage('Demo data loaded. Import a CSV to add client leads.'))
+      .catch((error: Error) => {
+        hasRequestedDemoSeed.current = false
+        setImportMessage(`Could not load demo data: ${error.message}`)
+      })
+  }, [convexLeads, replaceWithDemoData])
 
   const categories = useMemo(
     () => ['All categories', ...uniqueOptions(leadData.map((lead) => lead.category))],
@@ -343,7 +374,7 @@ function App() {
     Papa.parse(file, {
       header: true,
       skipEmptyLines: true,
-      complete: (results) => {
+      complete: async (results) => {
         const rows = results.data
           .map((row) => rowSchema.safeParse(row))
           .filter((result) => result.success)
@@ -351,25 +382,31 @@ function App() {
         const importedLeads = rows
           .map((row) => buildLeadFromRecord(row))
           .filter((lead): lead is Lead => Boolean(lead))
-        const existingKeys = new Set(leadData.map(getDedupKey))
-        const newLeads = importedLeads.filter((lead) => {
-          const key = getDedupKey(lead)
-          if (existingKeys.has(key)) return false
-          existingKeys.add(key)
-          return true
-        })
 
-        if (newLeads.length === 0) {
+        if (importedLeads.length === 0) {
           setImportMessage(`No new leads imported from ${file.name}. Check required name/company fields.`)
           event.target.value = ''
           return
         }
 
-        setLeadData((current) => [...newLeads, ...current])
-        setImportMessage(`Imported ${newLeads.length} leads from ${file.name}. ${importedLeads.length - newLeads.length} duplicates skipped.`)
-        setCategory('All categories')
-        setCity('All cities')
-        event.target.value = ''
+        try {
+          const result = await importLeads({
+            fileName: file.name,
+            rowsReceived: rows.length,
+            leads: importedLeads.map(toLeadInput),
+          })
+          const prefix =
+            result.leadsCreated === 0
+              ? `No new leads imported from ${file.name}.`
+              : `Imported ${result.leadsCreated} leads from ${file.name}.`
+          setImportMessage(`${prefix} ${result.duplicatesSkipped} duplicates skipped.`)
+          setCategory('All categories')
+          setCity('All cities')
+        } catch (error) {
+          setImportMessage(`Import failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+        } finally {
+          event.target.value = ''
+        }
       },
       error: (error) => {
         setImportMessage(`Import failed: ${error.message}`)
@@ -379,18 +416,23 @@ function App() {
   }
 
   const updateLeadStatus = (leadId: string, status: LeadStatus) => {
-    setLeadData((current) =>
-      current.map((lead) => (lead.id === leadId ? { ...lead, status } : lead)),
-    )
+    void updateLeadStatusMutation({ leadId: leadId as Id<'leads'>, status }).catch((error: Error) => {
+      setImportMessage(`Status update failed: ${error.message}`)
+    })
   }
 
   const resetDemoData = () => {
-    setLeadData(demoLeads)
-    setCategory('All categories')
-    setCity('All cities')
-    setSearchTerm('')
-    setMinScore(60)
-    setImportMessage('Demo data restored.')
+    void replaceWithDemoData({ leads: demoLeads.map(toLeadInput) })
+      .then(() => {
+        setCategory('All categories')
+        setCity('All cities')
+        setSearchTerm('')
+        setMinScore(60)
+        setImportMessage('Demo data restored.')
+      })
+      .catch((error: Error) => {
+        setImportMessage(`Demo reset failed: ${error.message}`)
+      })
   }
 
   const exportCsv = () => {
@@ -477,7 +519,7 @@ function App() {
       </section>
 
       <p className="import-status" role="status">
-        {importMessage}
+        {statusMessage}
       </p>
 
       <section className="metrics-grid" aria-label="Lead metrics">

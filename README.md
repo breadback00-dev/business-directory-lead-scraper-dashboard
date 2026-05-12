@@ -17,7 +17,7 @@ It is designed as a portfolio-ready Upwork demo for a **Business Directory Lead 
 - Adjust the minimum lead score with a range control
 - Review enrichment signals like email found, booking link, social links, outdated website, and CRM gaps
 - Import real lead files from CSV
-- Persist imported leads and status changes in browser storage
+- Persist imported leads and status changes in Convex
 - Update lead status across New, Contacted, Qualified, and Rejected
 - Export the filtered result set to CSV
 - Track operational metrics including visible leads, qualified leads, average score, and emails found
@@ -88,7 +88,7 @@ npm run preview
 4. Filter by category or city.
 5. Raise or lower the minimum score.
 6. Change a lead status.
-7. Refresh the browser to confirm imported leads and statuses persist.
+7. Refresh the browser to confirm imported leads and statuses persist from Convex.
 8. Export the filtered leads to CSV.
 
 ## CSV Import Format
@@ -127,7 +127,7 @@ The backend schema lives in `convex/schema.ts` and defines the foundation for th
 - `scrapeRuns`: scraper job metadata, progress counts, status, and logs
 - `leadSources`: configured source directories or CSV sources
 
-The current UI still works with browser persistence while the Convex migration is phased in. The next phase replaces local lead state with Convex queries and mutations.
+The dashboard reads leads through Convex queries and writes CSV imports, status changes, and demo resets through Convex mutations.
 
 ## Production Roadmap
 
@@ -148,4 +148,4 @@ This frontend is ready to connect to a real scraper pipeline. A production versi
 
 ## Project Status
 
-This is a polished frontend demo with mock data. It is structured to demonstrate the product experience before connecting a real scraping backend.
+This is a polished dashboard demo backed by Convex for lead storage. The remaining production work is the scraper and enrichment pipeline that will populate the same lead tables.

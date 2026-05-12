@@ -10,7 +10,12 @@ type AppConvexProviderProps = {
 
 export function AppConvexProvider({ children }: AppConvexProviderProps) {
   if (!convexClient) {
-    return children
+    return (
+      <main style={{ padding: '2rem', fontFamily: 'Inter, system-ui, sans-serif' }}>
+        <h1>Convex is not configured</h1>
+        <p>Add <code>VITE_CONVEX_URL</code> to <code>.env.local</code>, then restart the dev server.</p>
+      </main>
+    )
   }
 
   return <BaseConvexProvider client={convexClient}>{children}</BaseConvexProvider>
