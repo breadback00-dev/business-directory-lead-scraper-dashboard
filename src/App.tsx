@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { useMutation, useQuery } from 'convex/react'
 import {
   ArrowDownToLine,
+  Activity,
   Building2,
   CheckCircle2,
   Filter,
@@ -12,6 +13,7 @@ import {
   Mail,
   MapPin,
   Phone,
+  PlayCircle,
   RotateCcw,
   Search,
   UploadCloud,
@@ -280,7 +282,9 @@ function App() {
   const hasRequestedDemoSeed = useRef(false)
   const convexLeads = useQuery(api.leads.list)
   const importHistory = useQuery(api.leads.listImports)
+  const scrapeRuns = useQuery(api.scrapeRuns.listRecent)
   const importLeads = useMutation(api.leads.importMany)
+  const createManualScrapeRun = useMutation(api.scrapeRuns.createManualCompletedRun)
   const updateLeadStatusMutation = useMutation(api.leads.updateStatus)
   const replaceWithDemoData = useMutation(api.leads.replaceWithDemoData)
   const [searchTerm, setSearchTerm] = useState('')
@@ -431,6 +435,14 @@ function App() {
       })
   }
 
+  const createFakeScrapeRun = () => {
+    void createManualScrapeRun()
+      .then(() => setImportMessage('Manual scrape run recorded. Worker contract panel updated.'))
+      .catch((error: Error) => {
+        setImportMessage(`Scrape run failed: ${error.message}`)
+      })
+  }
+
   const exportCsv = () => {
     const headers = [
       'Business Name',
@@ -558,6 +570,65 @@ function App() {
           ) : (
             <p className="empty-import-history">
               {importHistory === undefined ? 'Loading import history...' : 'No CSV imports recorded yet.'}
+            </p>
+          )}
+        </div>
+      </section>
+
+      <section className="scrape-runs" aria-labelledby="scrape-runs-title">
+        <div className="scrape-runs-heading">
+          <Activity size={18} />
+          <div>
+            <h2 id="scrape-runs-title">Scrape runs</h2>
+            <p>Recent worker jobs, progress counts, and summary logs.</p>
+          </div>
+          <button className="ghost-button" type="button" onClick={createFakeScrapeRun}>
+            <PlayCircle size={17} />
+            Create manual run
+          </button>
+        </div>
+
+        <div className="scrape-run-list">
+          {(scrapeRuns ?? []).length > 0 ? (
+            scrapeRuns?.map((run) => (
+              <article className="scrape-run" key={run._id}>
+                <div className="scrape-run-title">
+                  <div>
+                    <strong>
+                      {run.targetCategory} / {run.targetLocation}
+                    </strong>
+                    <span>{new Date(run.createdAt).toLocaleString()}</span>
+                  </div>
+                  <span className={`run-pill ${run.status}`}>{run.status}</span>
+                </div>
+                <dl>
+                  <div>
+                    <dt>Pages</dt>
+                    <dd>{run.pagesChecked}</dd>
+                  </div>
+                  <div>
+                    <dt>Found</dt>
+                    <dd>{run.leadsFound}</dd>
+                  </div>
+                  <div>
+                    <dt>Saved</dt>
+                    <dd>{run.leadsSaved}</dd>
+                  </div>
+                  <div>
+                    <dt>Duplicates</dt>
+                    <dd>{run.duplicatesSkipped}</dd>
+                  </div>
+                  <div>
+                    <dt>Failures</dt>
+                    <dd>{run.failures}</dd>
+                  </div>
+                </dl>
+                <p>{run.summary || run.logLines.at(-1) || 'No summary yet.'}</p>
+              </article>
+            ))
+          ) : (
+            <p className="empty-scrape-runs">
+              {scrapeRuns === undefined ? 'Loading scrape runs...' : 'No scrape runs recorded yet.'}
             </p>
           )}
         </div>

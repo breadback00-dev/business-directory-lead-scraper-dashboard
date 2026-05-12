@@ -143,6 +143,21 @@ The backend schema lives in `convex/schema.ts` and defines the foundation for th
 
 The dashboard reads leads and import history through Convex queries and writes CSV imports, status changes, and demo resets through Convex mutations.
 
+## Scraper Worker Boundary
+
+Scrape job metadata lives in Convex. A future Node worker should do network and parsing work outside Convex, then report progress through Convex mutations.
+
+Worker flow:
+
+1. Call `scrapeRuns.create` with `targetCategory`, `targetLocation`, optional `maxPages`, and optional `leadSourceId`.
+2. Call `scrapeRuns.markRunning` when the worker claims the run.
+3. While crawling, call `scrapeRuns.updateProgress` with counts for pages checked, leads found, saved leads, duplicates, failures, and optional log lines.
+4. Save scraped records through `scrapeRuns.recordLead`; it deduplicates against existing leads, stores new records with `sourceType: scrape`, attaches them to the run, and updates found/saved/duplicate counts.
+5. If a lead already exists from another path, call `scrapeRuns.attachLead` to attach that existing lead ID to the run.
+6. Call `scrapeRuns.complete` with final counts and summary, or `scrapeRuns.fail` with a failure summary.
+
+The current dashboard includes a manual completed-run action so the run model, counts, logs, and recent-run display can be tested before a source-specific scraper exists.
+
 ## Production Roadmap
 
 This frontend is ready to connect to a real scraper pipeline. A production version would typically add:
