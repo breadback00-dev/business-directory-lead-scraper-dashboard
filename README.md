@@ -145,7 +145,7 @@ The dashboard reads leads and import history through Convex queries and writes C
 
 ## Scraper Worker Boundary
 
-Scrape job metadata lives in Convex. A future Node worker should do network and parsing work outside Convex, then report progress through Convex mutations.
+Scrape job metadata lives in Convex. Node workers do network and parsing work outside Convex, then report progress through Convex mutations.
 
 Worker flow:
 
@@ -156,13 +156,46 @@ Worker flow:
 5. If a lead already exists from another path, call `scrapeRuns.attachLead` to attach that existing lead ID to the run.
 6. Call `scrapeRuns.complete` with final counts and summary, or `scrapeRuns.fail` with a failure summary.
 
-The current dashboard includes a manual completed-run action so the run model, counts, logs, and recent-run display can be tested before a source-specific scraper exists.
+The current dashboard includes a manual completed-run action so the run model, counts, logs, and recent-run display can be tested alongside source-specific scrapers.
+
+## OpenStreetMap Directory Worker
+
+The first production adapter is `scripts/osmDirectoryWorker.js`. It uses OpenStreetMap data through the public Overpass API, which is suitable for a conservative first source because OSM data is open under the ODbL and the public Overpass instance documents small-use expectations. The worker uses one bounded API request per run, waits before requests, retries transient failures, and caps results at 50 records.
+
+Source rules:
+
+- Source: [OpenStreetMap Overpass API](https://wiki.openstreetmap.org/wiki/Overpass_API)
+- License and attribution: [OpenStreetMap copyright and license](https://www.openstreetmap.org/copyright)
+- Public instance budget used here: one query per worker run, capped records, no proxy rotation, no bypass logic
+- Attribution expectation: keep `OpenStreetMap` visible in the lead source/directory field and preserve the OSM listing URL on each lead
+
+Supported categories:
+
+- accountants
+- cafes
+- dentists
+- pharmacies
+- restaurants
+- solicitors
+
+Dry run without writing to Convex. `--country-code` defaults to `GB` so city names like Manchester resolve to the intended country:
+
+```bash
+npm run scrape:osm -- --category "dentists" --location "Manchester" --max-results 10 --dry-run
+```
+
+Write results to Convex:
+
+```bash
+CONVEX_URL="https://your-deployment.convex.cloud" npm run scrape:osm -- --category "dentists" --location "Manchester" --country-code "GB" --max-results 10 --write
+```
+
+`VITE_CONVEX_URL` also works if it is already exported in the shell. In write mode, the worker creates a scrape run, marks it running, writes leads through `scrapeRuns.recordLead`, then completes the run with saved and duplicate counts. Duplicate handling stays inside Convex so repeated worker runs do not create duplicate leads.
 
 ## Production Roadmap
 
 This frontend is ready to connect to a real scraper pipeline. A production version would typically add:
 
-- Directory-specific scraper adapters
 - Job queue for scraping runs
 - Backend API and database storage for leads and scrape history
 - Deduplication across directories

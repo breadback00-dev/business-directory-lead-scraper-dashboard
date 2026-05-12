@@ -10,7 +10,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "scrape:osm": "node scripts/osmDirectoryWorker.js"
   },
   "dependencies": {
     "convex": "^1.38.0",
