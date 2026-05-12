@@ -26,6 +26,7 @@ import './App.css'
 const statuses = ['New', 'Contacted', 'Qualified', 'Rejected'] as const
 const scraperCategories = ['dentists', 'accountants', 'cafes', 'pharmacies', 'restaurants', 'solicitors'] as const
 type LeadStatus = (typeof statuses)[number]
+type AppPage = 'leads' | 'scraper'
 
 type Lead = {
   id: string
@@ -300,6 +301,7 @@ function App() {
   const [scrapeLocation, setScrapeLocation] = useState('Manchester')
   const [scrapeCountryCode, setScrapeCountryCode] = useState('GB')
   const [scrapeMaxResults, setScrapeMaxResults] = useState(10)
+  const [activePage, setActivePage] = useState<AppPage>('leads')
   const [sheetsWebhookUrl, setSheetsWebhookUrl] = useState(() => {
     if (typeof window === 'undefined') return import.meta.env.VITE_SHEETS_WEBHOOK_URL ?? ''
     return localStorage.getItem(sheetsWebhookStorageKey) ?? import.meta.env.VITE_SHEETS_WEBHOOK_URL ?? ''
@@ -308,11 +310,15 @@ function App() {
   const leadData = useMemo(() => (convexLeads ?? []).map(toClientLead), [convexLeads])
   const statusMessage =
     importMessage ??
-    (convexLeads === undefined
-      ? 'Loading leads from Convex...'
-      : leadData.length > 0
-        ? 'Leads loaded from Convex. Import a CSV to add client leads.'
-        : 'Loading demo data into Convex...')
+    (activePage === 'leads'
+      ? convexLeads === undefined
+        ? 'Loading leads from Convex...'
+        : leadData.length > 0
+          ? 'Leads loaded from Convex. Import a CSV to add client leads.'
+          : 'Loading demo data into Convex...'
+      : scrapeRuns === undefined
+        ? 'Loading scraper runs from Convex...'
+        : 'Configure a source-specific scrape, queue it, then run the worker to process the next job.')
 
   useEffect(() => {
     if (convexLeads === undefined) return
@@ -598,46 +604,85 @@ function App() {
           <span>LeadVault</span>
         </div>
         <div className="topbar-actions">
-          <input
-            ref={fileInputRef}
-            className="sr-only"
-            type="file"
-            accept=".csv,text/csv"
-            onChange={handleImport}
-          />
-          <button className="ghost-button" type="button" onClick={() => fileInputRef.current?.click()}>
-            <UploadCloud size={17} />
-            Import CSV
-          </button>
-          <button className="ghost-button icon-button" type="button" onClick={resetDemoData} aria-label="Reset demo data">
-            <RotateCcw size={17} />
-          </button>
-          <button className="primary-button" type="button" onClick={exportCsv}>
-            <ArrowDownToLine size={17} />
-            Export CSV
-          </button>
-          <button className="ghost-button" type="button" onClick={exportToSheets}>
-            <Send size={17} />
-            Send to Sheets
-          </button>
+          {activePage === 'leads' ? (
+            <>
+              <input
+                ref={fileInputRef}
+                className="sr-only"
+                type="file"
+                accept=".csv,text/csv"
+                onChange={handleImport}
+              />
+              <button className="ghost-button" type="button" onClick={() => fileInputRef.current?.click()}>
+                <UploadCloud size={17} />
+                Import CSV
+              </button>
+              <button
+                className="ghost-button icon-button"
+                type="button"
+                onClick={resetDemoData}
+                aria-label="Reset demo data"
+              >
+                <RotateCcw size={17} />
+              </button>
+              <button className="primary-button" type="button" onClick={exportCsv}>
+                <ArrowDownToLine size={17} />
+                Export CSV
+              </button>
+              <button className="ghost-button" type="button" onClick={exportToSheets}>
+                <Send size={17} />
+                Send to Sheets
+              </button>
+            </>
+          ) : (
+            <button className="primary-button" type="button" onClick={queueScrapeRun}>
+              <PlayCircle size={17} />
+              Queue run
+            </button>
+          )}
         </div>
       </nav>
 
       <section className="workspace-heading" aria-labelledby="page-title">
         <div>
           <p className="eyebrow">Business Directory Lead Scraper</p>
-          <h1 id="page-title">Lead discovery dashboard</h1>
+          <h1 id="page-title">{activePage === 'leads' ? 'Lead discovery dashboard' : 'Scraper operations'}</h1>
         </div>
         <div className="run-status" aria-label="Latest scraper run status">
           <CheckCircle2 size={18} />
-          <span>{leadData.length} records loaded</span>
+          <span>{activePage === 'leads' ? `${leadData.length} records loaded` : `${scrapeRuns?.length ?? 0} recent runs`}</span>
         </div>
       </section>
+
+      <div className="page-tabs" role="tablist" aria-label="Dashboard pages">
+        <button
+          className={activePage === 'leads' ? 'active' : ''}
+          type="button"
+          role="tab"
+          aria-selected={activePage === 'leads'}
+          onClick={() => setActivePage('leads')}
+        >
+          <Mail size={17} />
+          Leads
+        </button>
+        <button
+          className={activePage === 'scraper' ? 'active' : ''}
+          type="button"
+          role="tab"
+          aria-selected={activePage === 'scraper'}
+          onClick={() => setActivePage('scraper')}
+        >
+          <Activity size={17} />
+          Scraper runs
+        </button>
+      </div>
 
       <p className="import-status" role="status">
         {statusMessage}
       </p>
 
+      {activePage === 'leads' ? (
+        <>
       <section className="import-history" aria-labelledby="import-history-title">
         <div className="import-history-heading">
           <History size={18} />
@@ -678,119 +723,6 @@ function App() {
           ) : (
             <p className="empty-import-history">
               {importHistory === undefined ? 'Loading import history...' : 'No CSV imports recorded yet.'}
-            </p>
-          )}
-        </div>
-      </section>
-
-      <section className="scrape-runs" aria-labelledby="scrape-runs-title">
-        <div className="scrape-runs-heading">
-          <Activity size={18} />
-          <div>
-            <h2 id="scrape-runs-title">Scrape runs</h2>
-            <p>Recent worker jobs, progress counts, and summary logs.</p>
-          </div>
-          <button className="ghost-button" type="button" onClick={createFakeScrapeRun}>
-            <PlayCircle size={17} />
-            Create manual run
-          </button>
-        </div>
-
-        <div className="scrape-operator">
-          <label>
-            <span>Source</span>
-            <input type="text" value="OpenStreetMap / Overpass" readOnly />
-          </label>
-          <label>
-            <span>Category</span>
-            <select
-              value={scrapeCategory}
-              onChange={(event) => setScrapeCategory(event.target.value as (typeof scraperCategories)[number])}
-            >
-              {scraperCategories.map((item) => (
-                <option key={item}>{item}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            <span>Location</span>
-            <input value={scrapeLocation} onChange={(event) => setScrapeLocation(event.target.value)} />
-          </label>
-          <label>
-            <span>Country</span>
-            <input
-              maxLength={2}
-              value={scrapeCountryCode}
-              onChange={(event) => setScrapeCountryCode(event.target.value.toUpperCase())}
-            />
-          </label>
-          <label>
-            <span>Max results</span>
-            <input
-              min={1}
-              max={50}
-              type="number"
-              value={scrapeMaxResults}
-              onChange={(event) => setScrapeMaxResults(Number(event.target.value))}
-            />
-          </label>
-          <button className="primary-button" type="button" onClick={queueScrapeRun}>
-            <PlayCircle size={17} />
-            Queue scrape run
-          </button>
-          <p>Public Overpass source, capped at 50 records, no proxy rotation or bypass logic.</p>
-        </div>
-
-        <div className="scrape-run-list">
-          {(scrapeRuns ?? []).length > 0 ? (
-            scrapeRuns?.map((run) => (
-              <article className="scrape-run" key={run._id}>
-                <div className="scrape-run-title">
-                  <div>
-                    <strong>
-                      {run.targetCategory} / {run.targetLocation}
-                    </strong>
-                    <span>{new Date(run.createdAt).toLocaleString()}</span>
-                  </div>
-                  <span className={`run-pill ${run.status}`}>{run.status}</span>
-                </div>
-                <dl>
-                  <div>
-                    <dt>Max</dt>
-                    <dd>{run.maxPages ?? 1}</dd>
-                  </div>
-                  <div>
-                    <dt>Pages</dt>
-                    <dd>{run.pagesChecked}</dd>
-                  </div>
-                  <div>
-                    <dt>Found</dt>
-                    <dd>{run.leadsFound}</dd>
-                  </div>
-                  <div>
-                    <dt>Saved</dt>
-                    <dd>{run.leadsSaved}</dd>
-                  </div>
-                  <div>
-                    <dt>Duplicates</dt>
-                    <dd>{run.duplicatesSkipped}</dd>
-                  </div>
-                  <div>
-                    <dt>Failures</dt>
-                    <dd>{run.failures}</dd>
-                  </div>
-                </dl>
-                <p>{run.summary || run.logLines.at(-1) || 'No summary yet.'}</p>
-                <ul className="scrape-run-log">
-                  {run.logLines.slice(-3).map((line, index) => (
-                    <li key={`${run._id}-${index}-${line}`}>{line}</li>
-                  ))}
-                </ul>
-              </article>
-            ))
-          ) : (
-            <p className="empty-scrape-runs">
-              {scrapeRuns === undefined ? 'Loading scrape runs...' : 'No scrape runs recorded yet.'}
             </p>
           )}
         </div>
@@ -948,6 +880,121 @@ function App() {
           </table>
         </div>
       </section>
+        </>
+      ) : (
+      <section className="scrape-runs" aria-labelledby="scrape-runs-title">
+        <div className="scrape-runs-heading">
+          <Activity size={18} />
+          <div>
+            <h2 id="scrape-runs-title">Scrape runs</h2>
+            <p>Recent worker jobs, progress counts, and summary logs.</p>
+          </div>
+          <button className="ghost-button" type="button" onClick={createFakeScrapeRun}>
+            <PlayCircle size={17} />
+            Create manual run
+          </button>
+        </div>
+
+        <div className="scrape-operator">
+          <label>
+            <span>Source</span>
+            <input type="text" value="OpenStreetMap / Overpass" readOnly />
+          </label>
+          <label>
+            <span>Category</span>
+            <select
+              value={scrapeCategory}
+              onChange={(event) => setScrapeCategory(event.target.value as (typeof scraperCategories)[number])}
+            >
+              {scraperCategories.map((item) => (
+                <option key={item}>{item}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>Location</span>
+            <input value={scrapeLocation} onChange={(event) => setScrapeLocation(event.target.value)} />
+          </label>
+          <label>
+            <span>Country</span>
+            <input
+              maxLength={2}
+              value={scrapeCountryCode}
+              onChange={(event) => setScrapeCountryCode(event.target.value.toUpperCase())}
+            />
+          </label>
+          <label>
+            <span>Max results</span>
+            <input
+              min={1}
+              max={50}
+              type="number"
+              value={scrapeMaxResults}
+              onChange={(event) => setScrapeMaxResults(Number(event.target.value))}
+            />
+          </label>
+          <button className="primary-button" type="button" onClick={queueScrapeRun}>
+            <PlayCircle size={17} />
+            Queue scrape run
+          </button>
+          <p>Public Overpass source, capped at 50 records, no proxy rotation or bypass logic.</p>
+        </div>
+
+        <div className="scrape-run-list">
+          {(scrapeRuns ?? []).length > 0 ? (
+            scrapeRuns?.map((run) => (
+              <article className="scrape-run" key={run._id}>
+                <div className="scrape-run-title">
+                  <div>
+                    <strong>
+                      {run.targetCategory} / {run.targetLocation}
+                    </strong>
+                    <span>{new Date(run.createdAt).toLocaleString()}</span>
+                  </div>
+                  <span className={`run-pill ${run.status}`}>{run.status}</span>
+                </div>
+                <dl>
+                  <div>
+                    <dt>Max</dt>
+                    <dd>{run.maxPages ?? 1}</dd>
+                  </div>
+                  <div>
+                    <dt>Pages</dt>
+                    <dd>{run.pagesChecked}</dd>
+                  </div>
+                  <div>
+                    <dt>Found</dt>
+                    <dd>{run.leadsFound}</dd>
+                  </div>
+                  <div>
+                    <dt>Saved</dt>
+                    <dd>{run.leadsSaved}</dd>
+                  </div>
+                  <div>
+                    <dt>Duplicates</dt>
+                    <dd>{run.duplicatesSkipped}</dd>
+                  </div>
+                  <div>
+                    <dt>Failures</dt>
+                    <dd>{run.failures}</dd>
+                  </div>
+                </dl>
+                <p>{run.summary || run.logLines.at(-1) || 'No summary yet.'}</p>
+                <ul className="scrape-run-log">
+                  {run.logLines.slice(-3).map((line, index) => (
+                    <li key={`${run._id}-${index}-${line}`}>{line}</li>
+                  ))}
+                </ul>
+              </article>
+            ))
+          ) : (
+            <p className="empty-scrape-runs">
+              {scrapeRuns === undefined ? 'Loading scrape runs...' : 'No scrape runs recorded yet.'}
+            </p>
+          )}
+        </div>
+      </section>
+      )}
     </main>
   )
 }

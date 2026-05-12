@@ -177,6 +177,30 @@ h2 {
   font-weight: 700;
 }
 
+.page-tabs {
+  display: inline-flex;
+  gap: 6px;
+  margin-bottom: 14px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: rgba(251, 252, 253, 0.82);
+}
+
+.page-tabs button {
+  min-height: 36px;
+  color: var(--muted);
+  background: transparent;
+  border-color: transparent;
+}
+
+.page-tabs button.active {
+  color: #fff;
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
+  box-shadow: 0 8px 18px rgba(15, 138, 166, 0.2);
+}
+
 .import-history {
   margin-bottom: 18px;
   padding: 14px;

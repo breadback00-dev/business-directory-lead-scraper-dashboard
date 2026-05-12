@@ -1,6 +1,6 @@
 # Business Directory Lead Scraper Dashboard
 
-A portfolio-ready lead-generation system for turning business directory data into a sales workspace. It collects directory leads, enriches homepages for contact signals, deduplicates records, scores lead quality, and gives clients a dashboard for filtering, qualifying, and exporting prospects.
+A portfolio-ready lead-generation system for turning business directory data into a sales workspace. It collects directory leads, enriches homepages for contact signals, deduplicates records, scores lead quality, and separates the client-facing lead workflow from scraper operations.
 
 ## Client Offer
 
@@ -27,6 +27,7 @@ The implementation also treats compliance as a product feature: the first produc
 ## Features
 
 - Search leads by company, category, city, source, email, or enrichment signal
+- Switch between a Leads workspace and a Scraper runs workspace
 - Filter by business category and city
 - Adjust the minimum lead score with a range control
 - Review enrichment signals like email found, booking link, social links, outdated website, and CRM gaps
@@ -98,11 +99,11 @@ npm run preview
 ## Demo Workflow
 
 1. Open the dashboard.
-2. Run the OpenStreetMap worker for a category and city, or import `sample-leads.csv`.
-3. Run homepage enrichment to find emails, contact pages, social links, and booking/contact signals.
-4. Search for a business type, city, email, or signal.
-5. Filter by category or city and raise or lower the minimum score.
-6. Change a lead status as the sales team qualifies the list.
+2. Use the **Scraper runs** page to queue an OpenStreetMap scrape by category, location, country, and result limit.
+3. Run the OSM worker to process the next queued scrape, or import `sample-leads.csv` from the **Leads** page.
+4. Run homepage enrichment to find emails, contact pages, social links, and booking/contact signals.
+5. Use the **Leads** page to search for a business type, city, email, or signal.
+6. Filter by category or city, raise or lower the minimum score, and update lead status as the sales team qualifies the list.
 7. Export the filtered leads to CSV or send them to a configured Google Sheets webhook.
 
 ## CSV Import Format
@@ -207,7 +208,7 @@ CONVEX_URL="https://your-deployment.convex.cloud" npm run scrape:osm -- --catego
 
 ## Dashboard Operator Flow
 
-The scraper can also be queued from the dashboard. The Scrape runs panel lets an operator choose:
+The scraper can also be queued from the **Scraper runs** page. This keeps operational controls away from the sales workspace. The operator page lets a user choose:
 
 - source: OpenStreetMap / Overpass
 - category
@@ -221,7 +222,7 @@ Click **Queue scrape run** to create a queued Convex `scrapeRuns` record. Then r
 npm run scrape:osm -- --process-next --write
 ```
 
-The worker claims the oldest queued run, marks it running, reads the configured category/location/result limit, saves or skips leads through Convex, and completes or fails the run with summary logs. The dashboard shows recent run status, limits, counts, summaries, and the latest log lines.
+The worker claims the oldest queued run, marks it running, reads the configured category/location/result limit, saves or skips leads through Convex, and completes or fails the run with summary logs. The Scraper runs page shows recent run status, limits, counts, summaries, and the latest log lines.
 
 This keeps source rules visible to the operator while preserving the current conservative limits: public Overpass source, capped results, no proxy rotation, and no bypass logic.
 
@@ -316,4 +317,4 @@ This frontend is ready to connect to a real scraper pipeline. A production versi
 
 ## Project Status
 
-This is a polished dashboard demo backed by Convex for lead storage, a working OpenStreetMap scraper adapter, homepage enrichment, and Google Sheets webhook export. The next production step is a dashboard-triggered operator flow for configuring and running scraper jobs without the command line.
+This is a polished dashboard demo backed by Convex for lead storage, a working OpenStreetMap scraper adapter, homepage enrichment, Google Sheets webhook export, and a separate scraper-operations page for configuring queued runs.
