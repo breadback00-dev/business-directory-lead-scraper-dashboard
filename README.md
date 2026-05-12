@@ -205,6 +205,26 @@ CONVEX_URL="https://your-deployment.convex.cloud" npm run scrape:osm -- --catego
 
 `VITE_CONVEX_URL` also works if it is already exported in the shell. In write mode, the worker creates a scrape run, marks it running, writes leads through `scrapeRuns.recordLead`, then completes the run with saved and duplicate counts. Duplicate handling stays inside Convex so repeated worker runs do not create duplicate leads.
 
+## Dashboard Operator Flow
+
+The scraper can also be queued from the dashboard. The Scrape runs panel lets an operator choose:
+
+- source: OpenStreetMap / Overpass
+- category
+- location
+- country code
+- maximum results
+
+Click **Queue scrape run** to create a queued Convex `scrapeRuns` record. Then run the worker in queue-processing mode:
+
+```bash
+npm run scrape:osm -- --process-next --write
+```
+
+The worker claims the oldest queued run, marks it running, reads the configured category/location/result limit, saves or skips leads through Convex, and completes or fails the run with summary logs. The dashboard shows recent run status, limits, counts, summaries, and the latest log lines.
+
+This keeps source rules visible to the operator while preserving the current conservative limits: public Overpass source, capped results, no proxy rotation, and no bypass logic.
+
 ## Homepage Enrichment Worker
 
 The first enrichment worker is `scripts/homepageEnrichmentWorker.js`. It visits business homepages already stored on leads, extracts lightweight sales signals, and writes the results back through Convex. It intentionally checks only the homepage in this phase: no login walls, no bypassing, no aggressive crawling, and no contact-form submission.

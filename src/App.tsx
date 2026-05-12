@@ -24,6 +24,7 @@ import type { Doc, Id } from '../convex/_generated/dataModel'
 import './App.css'
 
 const statuses = ['New', 'Contacted', 'Qualified', 'Rejected'] as const
+const scraperCategories = ['dentists', 'accountants', 'cafes', 'pharmacies', 'restaurants', 'solicitors'] as const
 type LeadStatus = (typeof statuses)[number]
 
 type Lead = {
@@ -286,6 +287,7 @@ function App() {
   const importHistory = useQuery(api.leads.listImports)
   const scrapeRuns = useQuery(api.scrapeRuns.listRecent)
   const importLeads = useMutation(api.leads.importMany)
+  const createScrapeRun = useMutation(api.scrapeRuns.create)
   const createManualScrapeRun = useMutation(api.scrapeRuns.createManualCompletedRun)
   const updateLeadStatusMutation = useMutation(api.leads.updateStatus)
   const replaceWithDemoData = useMutation(api.leads.replaceWithDemoData)
@@ -294,6 +296,10 @@ function App() {
   const [city, setCity] = useState('All cities')
   const [minScore, setMinScore] = useState(60)
   const [importMessage, setImportMessage] = useState<string | null>(null)
+  const [scrapeCategory, setScrapeCategory] = useState<(typeof scraperCategories)[number]>('dentists')
+  const [scrapeLocation, setScrapeLocation] = useState('Manchester')
+  const [scrapeCountryCode, setScrapeCountryCode] = useState('GB')
+  const [scrapeMaxResults, setScrapeMaxResults] = useState(10)
   const [sheetsWebhookUrl, setSheetsWebhookUrl] = useState(() => {
     if (typeof window === 'undefined') return import.meta.env.VITE_SHEETS_WEBHOOK_URL ?? ''
     return localStorage.getItem(sheetsWebhookStorageKey) ?? import.meta.env.VITE_SHEETS_WEBHOOK_URL ?? ''
@@ -452,6 +458,38 @@ function App() {
       .then(() => setImportMessage('Manual scrape run recorded. Worker contract panel updated.'))
       .catch((error: Error) => {
         setImportMessage(`Scrape run failed: ${error.message}`)
+      })
+  }
+
+  const queueScrapeRun = () => {
+    const location = scrapeLocation.trim()
+    const countryCode = scrapeCountryCode.trim().toUpperCase()
+
+    if (!location) {
+      setImportMessage('Scrape run needs a city or local authority area.')
+      return
+    }
+
+    if (!/^[A-Z]{2}$/.test(countryCode)) {
+      setImportMessage('Use a two-letter country code, such as GB or US.')
+      return
+    }
+
+    const maxResults = Math.min(50, Math.max(1, Math.floor(scrapeMaxResults)))
+    void createScrapeRun({
+      targetCategory: scrapeCategory,
+      targetLocation: `${location}, ${countryCode}`,
+      maxPages: maxResults,
+    })
+      .then(() => {
+        setScrapeCountryCode(countryCode)
+        setScrapeMaxResults(maxResults)
+        setImportMessage(
+          `Queued ${scrapeCategory} scrape for ${location}, ${countryCode}. Run npm run scrape:osm -- --process-next --write to process it.`,
+        )
+      })
+      .catch((error: Error) => {
+        setImportMessage(`Could not queue scrape run: ${error.message}`)
       })
   }
 
@@ -658,6 +696,51 @@ function App() {
           </button>
         </div>
 
+        <div className="scrape-operator">
+          <label>
+            <span>Source</span>
+            <input type="text" value="OpenStreetMap / Overpass" readOnly />
+          </label>
+          <label>
+            <span>Category</span>
+            <select
+              value={scrapeCategory}
+              onChange={(event) => setScrapeCategory(event.target.value as (typeof scraperCategories)[number])}
+            >
+              {scraperCategories.map((item) => (
+                <option key={item}>{item}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>Location</span>
+            <input value={scrapeLocation} onChange={(event) => setScrapeLocation(event.target.value)} />
+          </label>
+          <label>
+            <span>Country</span>
+            <input
+              maxLength={2}
+              value={scrapeCountryCode}
+              onChange={(event) => setScrapeCountryCode(event.target.value.toUpperCase())}
+            />
+          </label>
+          <label>
+            <span>Max results</span>
+            <input
+              min={1}
+              max={50}
+              type="number"
+              value={scrapeMaxResults}
+              onChange={(event) => setScrapeMaxResults(Number(event.target.value))}
+            />
+          </label>
+          <button className="primary-button" type="button" onClick={queueScrapeRun}>
+            <PlayCircle size={17} />
+            Queue scrape run
+          </button>
+          <p>Public Overpass source, capped at 50 records, no proxy rotation or bypass logic.</p>
+        </div>
+
         <div className="scrape-run-list">
           {(scrapeRuns ?? []).length > 0 ? (
             scrapeRuns?.map((run) => (
@@ -672,6 +755,10 @@ function App() {
                   <span className={`run-pill ${run.status}`}>{run.status}</span>
                 </div>
                 <dl>
+                  <div>
+                    <dt>Max</dt>
+                    <dd>{run.maxPages ?? 1}</dd>
+                  </div>
                   <div>
                     <dt>Pages</dt>
                     <dd>{run.pagesChecked}</dd>
@@ -694,6 +781,11 @@ function App() {
                   </div>
                 </dl>
                 <p>{run.summary || run.logLines.at(-1) || 'No summary yet.'}</p>
+                <ul className="scrape-run-log">
+                  {run.logLines.slice(-3).map((line, index) => (
+                    <li key={`${run._id}-${index}-${line}`}>{line}</li>
+                  ))}
+                </ul>
               </article>
             ))
           ) : (

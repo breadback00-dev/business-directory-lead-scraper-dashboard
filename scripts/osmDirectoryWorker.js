@@ -1,4 +1,5 @@
 import { ConvexHttpClient } from 'convex/browser'
+import { existsSync, readFileSync } from 'node:fs'
 import { api } from '../convex/_generated/api.js'
 
 const OVERPASS_ENDPOINT = 'https://overpass-api.de/api/interpreter'
@@ -30,12 +31,24 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 const isOption = (value) => value.startsWith('--')
 const asCleanText = (value) => String(value ?? '').replace(/\s+/g, ' ').trim()
 
+const loadLocalEnv = () => {
+  if (process.env.CONVEX_URL || process.env.VITE_CONVEX_URL || !existsSync('.env.local')) return
+
+  const lines = readFileSync('.env.local', 'utf8').split(/\r?\n/)
+  for (const line of lines) {
+    const match = line.match(/^\s*(VITE_CONVEX_URL|CONVEX_URL)\s*=\s*(.+?)\s*$/)
+    if (!match) continue
+    process.env[match[1]] = match[2].replace(/^["']|["']$/g, '')
+  }
+}
+
 const parseArgs = (argv) => {
   const options = {
     category: '',
     location: '',
     countryCode: 'GB',
     maxResults: 10,
+    processNext: false,
     write: false,
   }
 
@@ -52,6 +65,7 @@ const parseArgs = (argv) => {
     else if (arg === '--location') options.location = takeValue()
     else if (arg === '--country-code') options.countryCode = takeValue()
     else if (arg === '--max-results') options.maxResults = Number(takeValue())
+    else if (arg === '--process-next') options.processNext = true
     else if (arg === '--write') options.write = true
     else if (arg === '--dry-run') options.write = false
     else if (arg === '--help' || arg === '-h') options.help = true
@@ -66,19 +80,22 @@ const printHelp = () => {
 Usage:
   npm run scrape:osm -- --category "dentists" --location "Manchester" --max-results 10 --dry-run
   npm run scrape:osm -- --category "dentists" --location "Manchester" --max-results 10 --write
+  npm run scrape:osm -- --process-next --write
 
 Options:
   --category      Supported values: ${Object.keys(categoryFilters).join(', ')}
   --location      City or local authority area name to query in OpenStreetMap
   --country-code  ISO 3166-1 alpha-2 country code for disambiguation (default: GB)
   --max-results   Maximum records to request, capped at ${MAX_RESULTS_CAP}
+  --process-next  Claim and process the oldest queued Convex scrape run
   --dry-run       Log extracted records without writing to Convex (default)
-  --write         Create a Convex scrape run and save deduplicated leads
+  --write         Create or process a Convex scrape run and save deduplicated leads
 `)
 }
 
 const validateOptions = (options) => {
   if (options.help) return
+  if (options.processNext) return
 
   options.category = asCleanText(options.category).toLowerCase()
   options.location = asCleanText(options.location)
@@ -91,6 +108,33 @@ const validateOptions = (options) => {
   }
   if (!options.location) throw new Error('Provide --location.')
   if (!/^[A-Z]{2}$/.test(options.countryCode)) throw new Error('Provide --country-code as an ISO alpha-2 code, such as GB.')
+}
+
+const getConvexClient = () => {
+  const convexUrl = process.env.CONVEX_URL || process.env.VITE_CONVEX_URL
+  if (!convexUrl) throw new Error('Set CONVEX_URL or VITE_CONVEX_URL before writing or processing queued runs.')
+  return new ConvexHttpClient(convexUrl)
+}
+
+const optionsFromQueuedRun = (run) => {
+  const [rawLocation, rawCountryCode] = run.targetLocation.split(',').map((part) => part.trim())
+  const category = asCleanText(run.targetCategory).toLowerCase()
+  const location = rawLocation || asCleanText(run.targetLocation)
+  const countryCode = (rawCountryCode || 'GB').toUpperCase()
+  const maxResults = Math.min(MAX_RESULTS_CAP, Math.max(1, Math.floor(run.maxPages ?? 10)))
+  const options = {
+    category,
+    location,
+    countryCode,
+    maxResults,
+    processNext: true,
+    write: true,
+  }
+
+  if (!categoryFilters[options.category]) throw new Error(`Queued run category "${run.targetCategory}" is not supported by the OSM worker.`)
+  if (!options.location) throw new Error('Queued run is missing a target location.')
+  if (!/^[A-Z]{2}$/.test(options.countryCode)) throw new Error(`Queued run country code "${options.countryCode}" is invalid.`)
+  return options
 }
 
 const buildOverpassQuery = ({ category, location, countryCode, maxResults }) => {
@@ -206,24 +250,22 @@ const collectLeads = async (options) => {
   }
 }
 
-const writeToConvex = async (options, leads) => {
-  const convexUrl = process.env.CONVEX_URL || process.env.VITE_CONVEX_URL
-  if (!convexUrl) throw new Error('Set CONVEX_URL or VITE_CONVEX_URL before running with --write.')
-
-  const client = new ConvexHttpClient(convexUrl)
-  const runId = await client.mutation(api.scrapeRuns.create, {
-    targetCategory: categoryFilters[options.category].label,
-    targetLocation: `${options.location}, ${options.countryCode}`,
-    maxPages: 1,
-  })
-
-  await client.mutation(api.scrapeRuns.markRunning, {
-    scrapeRunId: runId,
-    logLine: `Worker querying ${SOURCE_NAME}.`,
-  })
-
+const saveLeadsToRun = async ({ client, runId, leads }) => {
   let created = 0
   let duplicates = 0
+
+  await client.mutation(api.scrapeRuns.updateProgress, {
+    scrapeRunId: runId,
+    progress: {
+      pagesChecked: 1,
+      leadsFound: leads.length,
+      leadsSaved: 0,
+      duplicatesSkipped: 0,
+      failures: 0,
+    },
+    logLine: `Fetched ${leads.length} ${SOURCE_NAME} result(s).`,
+  })
+
 
   for (const lead of leads) {
     const result = await client.mutation(api.scrapeRuns.recordLead, {
@@ -249,13 +291,68 @@ const writeToConvex = async (options, leads) => {
   return { runId, created, duplicates }
 }
 
+const writeToNewConvexRun = async (options, leads) => {
+  const client = getConvexClient()
+  const runId = await client.mutation(api.scrapeRuns.create, {
+    targetCategory: categoryFilters[options.category].label,
+    targetLocation: `${options.location}, ${options.countryCode}`,
+    maxPages: options.maxResults,
+  })
+
+  await client.mutation(api.scrapeRuns.markRunning, {
+    scrapeRunId: runId,
+    logLine: `Worker querying ${SOURCE_NAME}.`,
+  })
+
+  return await saveLeadsToRun({ client, runId, leads })
+}
+
+const processNextQueuedRun = async () => {
+  const client = getConvexClient()
+  const run = await client.mutation(api.scrapeRuns.claimNextQueued, {
+    logLine: `OSM worker claimed queued run.`,
+  })
+
+  if (!run) {
+    console.log('No queued scrape runs found.')
+    return
+  }
+
+  const options = optionsFromQueuedRun(run)
+  console.log(`Claimed queued run ${run._id}: ${categoryFilters[options.category].label} in ${options.location}, ${options.countryCode}`)
+
+  try {
+    const { osmTimestamp, leads } = await collectLeads(options)
+    console.log(`OSM data timestamp: ${osmTimestamp || 'not provided'}`)
+    console.log(`Extracted records: ${leads.length}`)
+    for (const lead of leads) console.log(JSON.stringify(lead))
+
+    const result = await saveLeadsToRun({ client, runId: run._id, leads })
+    console.log(`Convex scrape run ${result.runId} completed: ${result.created} saved, ${result.duplicates} duplicate(s).`)
+  } catch (error) {
+    const summary = error instanceof Error ? error.message : String(error)
+    await client.mutation(api.scrapeRuns.fail, {
+      scrapeRunId: run._id,
+      summary: `Queued OSM run failed: ${summary}`,
+    })
+    throw error
+  }
+}
+
 const main = async () => {
+  loadLocalEnv()
   const options = parseArgs(process.argv.slice(2))
   if (options.help) {
     printHelp()
     return
   }
   validateOptions(options)
+
+  if (options.processNext) {
+    if (!options.write) throw new Error('Use --write with --process-next so the worker can claim and update the queued run.')
+    await processNextQueuedRun()
+    return
+  }
 
   console.log(`Source: ${SOURCE_NAME}`)
   console.log(`Rules: ${SOURCE_RULES_URL}`)
@@ -276,7 +373,7 @@ const main = async () => {
     return
   }
 
-  const result = await writeToConvex(options, leads)
+  const result = await writeToNewConvexRun(options, leads)
   console.log(`Convex scrape run ${result.runId} completed: ${result.created} saved, ${result.duplicates} duplicate(s).`)
 }
 

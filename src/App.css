@@ -300,6 +300,46 @@ h2 {
   gap: 10px;
 }
 
+.scrape-operator {
+  display: grid;
+  grid-template-columns: 1.35fr 1fr 1fr 0.55fr 0.7fr auto;
+  gap: 10px;
+  align-items: end;
+  margin-bottom: 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #f6fafc;
+}
+
+.scrape-operator label {
+  display: grid;
+  gap: 6px;
+}
+
+.scrape-operator label span {
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.scrape-operator input,
+.scrape-operator select {
+  min-height: 40px;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0 10px;
+  color: var(--ink);
+  background: var(--surface);
+}
+
+.scrape-operator p {
+  grid-column: 1 / -1;
+}
+
 .scrape-run {
   display: grid;
   gap: 12px;
@@ -363,7 +403,7 @@ h2 {
 
 .scrape-run dl {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 8px;
   margin: 0;
 }
@@ -389,11 +429,20 @@ h2 {
 }
 
 .scrape-run p,
-.empty-scrape-runs {
+.empty-scrape-runs,
+.scrape-operator p,
+.scrape-run-log {
   color: var(--muted);
   font-family: var(--mono);
   font-size: 13px;
   font-weight: 700;
+}
+
+.scrape-run-log {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 18px;
 }
 
 .metrics-grid {
@@ -698,6 +747,14 @@ tbody tr:last-child td {
     width: 100%;
   }
 
+  .scrape-operator {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .scrape-operator button {
+    width: 100%;
+  }
+
   .score-field {
     flex: 1 1 100%;
   }
@@ -719,6 +776,10 @@ tbody tr:last-child td {
   .scrape-run-title {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .scrape-operator {
+    grid-template-columns: 1fr;
   }
 
   .topbar-actions {

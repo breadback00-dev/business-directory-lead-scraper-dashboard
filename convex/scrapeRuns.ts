@@ -84,7 +84,7 @@ const mergeProgress = (progress: ScrapeRunProgress) => ({
 export const listRecent = query({
   args: {},
   handler: async (ctx) => {
-    return await ctx.db.query('scrapeRuns').withIndex('by_createdAt').order('desc').take(5)
+    return await ctx.db.query('scrapeRuns').withIndex('by_createdAt').order('desc').take(8)
   },
 })
 
@@ -132,6 +132,37 @@ export const markRunning = mutation({
       updatedAt,
       logLines: [...run.logLines, args.logLine?.trim() || 'Run started.'],
     })
+  },
+})
+
+export const claimNextQueued = mutation({
+  args: {
+    logLine: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const run = await ctx.db
+      .query('scrapeRuns')
+      .withIndex('by_status', (q) => q.eq('status', 'queued'))
+      .order('asc')
+      .first()
+
+    if (!run) return null
+
+    const updatedAt = now()
+    await ctx.db.patch(run._id, {
+      status: 'running',
+      startedAt: run.startedAt ?? updatedAt,
+      updatedAt,
+      logLines: [...run.logLines, args.logLine?.trim() || 'Worker claimed queued run.'],
+    })
+
+    return {
+      ...run,
+      status: 'running' as const,
+      startedAt: run.startedAt ?? updatedAt,
+      updatedAt,
+      logLines: [...run.logLines, args.logLine?.trim() || 'Worker claimed queued run.'],
+    }
   },
 })
 
