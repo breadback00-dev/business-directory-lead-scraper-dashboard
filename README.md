@@ -1,6 +1,20 @@
 # Business Directory Lead Scraper Dashboard
 
-A portfolio-ready lead-generation system for turning business directory data into a sales workspace. It collects directory leads, enriches homepages for contact signals, deduplicates records, scores lead quality, and separates the client-facing lead workflow from scraper operations.
+A working lead-generation dashboard that turns business directory data into a sales-ready workspace.
+
+It collects local business leads, enriches homepages for contact signals, deduplicates records, scores lead quality, and separates the client-facing sales workflow from scraper operations. The current demo uses OpenStreetMap/Overpass as a conservative public-data source, then lets operators import CSVs, process scrape runs, enrich websites, update lead status, export CSVs, and send filtered leads to Google Sheets.
+
+![Business Directory Lead Scraper dashboard](./dashboard-screenshot.png)
+
+## What This Demonstrates
+
+- A practical B2B automation product, not just a raw scraper script
+- React + TypeScript dashboard design for filtering, scoring, and qualifying leads
+- Convex-backed persistence for leads, imports, scrape runs, and status updates
+- CSV import with validation, friendly column aliases, and deduplication
+- A bounded OpenStreetMap worker with attribution and conservative request limits
+- A homepage enrichment worker that extracts emails, contact links, social links, and booking signals
+- Export paths for CSV and Google Sheets style webhooks
 
 ## Client Offer
 
@@ -10,13 +24,9 @@ This demo is designed for B2B agencies, local SEO/web-design shops, vertical Saa
 
 ## Outcome Examples
 
-- `Manchester dentists` -> 5 OpenStreetMap leads scraped, 5 duplicates skipped on repeat run, homepage enrichment found emails, contact pages, social links, and booking signals.
-- `Local SEO agency workflow` -> filter for businesses with websites, weak contact signals, or missing booking/contact paths, then export qualified leads to Google Sheets.
-- `Outbound agency workflow` -> import a client CSV, deduplicate it against scraped leads, score the combined list, and export only high-fit prospects.
-
-![Business Directory Lead Scraper dashboard](./dashboard-screenshot.png)
-
-Demo video: add a 30-second Loom walkthrough link here.
+- `Manchester dentists`: 5 OpenStreetMap leads scraped, 5 duplicates skipped on repeat run, homepage enrichment found emails, contact pages, social links, and booking signals.
+- `Local SEO agency workflow`: filter for businesses with websites, weak contact signals, or missing booking/contact paths, then export qualified leads to Google Sheets.
+- `Outbound agency workflow`: import a client CSV, deduplicate it against scraped leads, score the combined list, and export only high-fit prospects.
 
 ## Why This Project Exists
 
@@ -305,7 +315,7 @@ The webhook must allow browser `POST` requests from the dashboard origin and ret
 
 ## Production Roadmap
 
-This frontend is ready to connect to a real scraper pipeline. A production version would typically add:
+A production version would typically add:
 
 - Job queue for scraping runs
 - Backend API and database storage for leads and scrape history
